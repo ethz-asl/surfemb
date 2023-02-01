@@ -19,8 +19,15 @@ parser.add_argument('model_path')
 parser.add_argument('--device', default='cuda:0')
 parser.add_argument('--res-data', type=int, default=256)
 parser.add_argument('--res-crop', type=int, default=224)
-parser.add_argument('--max-poses', type=int, default=10000)
-parser.add_argument('--max-pose-evaluations', type=int, default=1000)
+parser.add_argument(
+    '--use-normals-criterion',
+    type=str,
+    required=True,
+    help=("Whether to use criterion based on normals to filter out pose "
+          "hypotheses."))
+# Unused.
+# parser.add_argument('--max-poses', type=int, default=10000)
+# parser.add_argument('--max-pose-evaluations', type=int, default=1000)
 parser.add_argument('--no-rotation-ensemble',
                     dest='rotation_ensemble',
                     action='store_false')
@@ -97,7 +104,7 @@ def infer(i, d):
             obj_keys=obj_keys,
             obj_diameter=obj_.diameter,
             K=K_crop,
-        )
+            use_normals_criterion=args.use_normals_criterion)
         success = len(scores) > 0
         if success:
             best_idx = torch.argmax(scores).item()

@@ -21,6 +21,12 @@ parser.add_argument('--real', action='store_true')
 parser.add_argument('--detection', action='store_true')
 parser.add_argument('--i', type=int, default=0)
 parser.add_argument('--device', default='cuda:0')
+parser.add_argument(
+    '--use-normals-criterion',
+    type=str,
+    required=True,
+    help=("Whether to use criterion based on normals to filter out pose "
+          "hypotheses."))
 
 args = parser.parse_args()
 data_i = args.i
@@ -226,7 +232,7 @@ while True:
                  obj_keys=keys_verts,
                  obj_diameter=obj_.diameter,
                  K=K_crop,
-             )
+                 use_normals_criterion=args.use_normals_criterion)
         if not len(scores):
             print('no pose')
             return None

@@ -15,6 +15,7 @@ def estimate_pose(mask_lgts: torch.tensor,
                   obj_keys: torch.tensor,
                   obj_diameter: float,
                   K: np.ndarray,
+                  use_normals_criterion: str,
                   max_poses=10000,
                   max_pose_evaluations=1000,
                   down_sample_scale=3,
@@ -43,6 +44,8 @@ def estimate_pose(mask_lgts: torch.tensor,
     :param obj_keys: (m, e)
     :param alpha: exponent factor for correspondence weighing
     :param K: (3, 3) camera intrinsics
+    :param use_normals_criterion: Whether to use criterion based on normals to
+        filter out pose hypotheses.
     :param max_poses: number of poses to sample (before pruning)
     :param max_pose_evaluations: maximum number of poses to evaluate / score
         after pruning
@@ -53,6 +56,10 @@ def estimate_pose(mask_lgts: torch.tensor,
         RANSAC frameworks
     :param poses: evaluate these poses instead of sampling poses
     """
+    assert (isinstance(use_normals_criterion, str) and
+            use_normals_criterion.lower() in ["true", "false"])
+    use_normals_criterion = use_normals_criterion.lower() == "true"
+
     device = mask_lgts.device
     r = mask_lgts.shape[0]
     m, e = obj_keys.shape
@@ -208,14 +215,20 @@ def estimate_pose(mask_lgts: torch.tensor,
             z_max = K[0, 0] * obj_diameter / (res_sampled * 0.5)
             size_mask = (z_min < z) & (z < z_max)
 
-            # Prune hypotheses where correspondences are not visible, estimated
-            # by the face normal.
-            Rt = poses[:, :3, :3].transpose(0, 2, 1)  # (max_poses, 3, 3)
-            n3d_cam = n3d @ Rt  # (max_poses, 3 pts, 3 nxnynz)
-            p3d_cam = p3d[:, :3] @ Rt + poses[:, None, :3,
-                                              3]  # (max_poses, 3 pts, 3 xyz)
-            normals_dot = (n3d_cam * p3d_cam).sum(axis=-1)  # (max_poses, 3 pts)
-            normals_mask = np.all(normals_dot < 0, axis=-1)  # (max_poses,)
+            if (use_normals_criterion):
+                # Prune hypotheses where correspondences are not visible,
+                # estimated by the face normal.
+                Rt = poses[:, :3, :3].transpose(0, 2, 1)  # (max_poses, 3, 3)
+                n3d_cam = n3d @ Rt  # (max_poses, 3 pts, 3 nxnynz)
+                # (max_poses, 3 pts, 3 xyz)
+                p3d_cam = p3d[:, :3] @ Rt + poses[:, None, :3, 3]
+                normals_dot = (n3d_cam * p3d_cam).sum(
+                    axis=-1)  # (max_poses, 3 pts)
+                normals_mask = np.all(normals_dot < 0, axis=-1)  # (max_poses,)
+            else:
+                print("\033[93mNot using normals criterion for pruning pose "
+                      "hypotheses.\033[0m")
+                normals_mask = np.ones([len(poses)], dtype=bool)
 
             # allow not pruning for debugging reasons
             if do_prune:

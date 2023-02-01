@@ -7,12 +7,23 @@ from scipy.optimize import minimize
 from .utils import Rodrigues
 
 
-def refine_pose(R: np.ndarray, t: np.ndarray, query_img, renderer, obj_idx, K_crop, obj_, model, keys_verts,
-                interpolation='bilinear', n_samples_denom=4096, method='BFGS'):
+def refine_pose(R: np.ndarray,
+                t: np.ndarray,
+                query_img,
+                renderer,
+                obj_idx,
+                K_crop,
+                obj_,
+                model,
+                keys_verts,
+                interpolation='bilinear',
+                n_samples_denom=4096,
+                method='BFGS'):
     """
-    Refines the pose estimate (R, t) by local maximization of the log prob (according to the queries / keys)
-    of the initially visible surface.
-    Bilinear interpolation and PyTorch autograd to get the gradient, and BFGS for optimization.
+    Refines the pose estimate (R, t) by local maximization of the log prob
+    (according to the queries / keys) of the initially visible surface.
+    Bilinear interpolation and PyTorch autograd to get the gradient, and BFGS
+    for optimization.
     """
     h, w, _ = query_img.shape
     assert h == w
@@ -22,16 +33,24 @@ def refine_pose(R: np.ndarray, t: np.ndarray, query_img, renderer, obj_idx, K_cr
     # Get the object coordinates and keys of the initially visible surface
     coord_img = renderer.render(obj_idx, K_crop, R, t)
     mask = coord_img[..., 3] == 1.
-    coord_norm_masked = torch.from_numpy(coord_img[..., :3][mask]).to(device)  # (N, 3)
+    coord_norm_masked = torch.from_numpy(coord_img[..., :3][mask]).to(
+        device)  # (N, 3)
     keys_masked = model.infer_mlp(coord_norm_masked, obj_idx)  # (N, emb_dim)
-    coord_masked = coord_norm_masked * obj_.scale + torch.from_numpy(obj_.offset).to(device)
-    coord_masked = torch.cat((coord_masked, torch.ones(len(coord_masked), 1, device=device)), dim=1)  # (N, 4)
+    coord_masked = coord_norm_masked * obj_.scale + torch.from_numpy(
+        obj_.offset).to(device)
+    coord_masked = torch.cat(
+        (coord_masked, torch.ones(len(coord_masked), 1, device=device)),
+        dim=1)  # (N, 4)
     K_crop = torch.from_numpy(K_crop).to(device)
 
     # precompute log denominator in softmax (log sum exp over keys) per query
-    # needs to be batched or estimated with reduced amount of keys (as implemented here) because of memory requirements
-    keys_sampled = keys_verts[torch.randperm(len(keys_verts), device=device)[:n_samples_denom]]
-    denom_img = torch.logsumexp(query_img @ keys_sampled.T, dim=-1, keepdim=True)  # (H, W, 1)
+    # needs to be batched or estimated with reduced amount of keys (as
+    # implemented here) because of memory requirements
+    keys_sampled = keys_verts[torch.randperm(len(keys_verts),
+                                             device=device)[:n_samples_denom]]
+    denom_img = torch.logsumexp(query_img @ keys_sampled.T,
+                                dim=-1,
+                                keepdim=True)  # (H, W, 1)
     coord_masked = coord_masked.float()
     K_crop = K_crop.float()
 
@@ -72,7 +91,10 @@ def refine_pose(R: np.ndarray, t: np.ndarray, query_img, renderer, obj_idx, K_cr
 
     rvec = cv2.Rodrigues(R)[0]
     pose = np.array((*rvec[:, 0], *t[:, 0]))
-    result = minimize(fun=objective, x0=pose, jac=lambda pose: objective(pose, return_grad=True), method=method)
+    result = minimize(fun=objective,
+                      x0=pose,
+                      jac=lambda pose: objective(pose, return_grad=True),
+                      method=method)
 
     pose = result.x
     R = cv2.Rodrigues(pose[:3])[0]

@@ -27,7 +27,8 @@ def recursive_dict(*_):
 
 
 # only save detection results from the target objects
-targets_raw = json.load(open(f'data/bop/{args.dataset}/test_targets_bop19.json'))
+targets_raw = json.load(
+    open(f'data/bop/{args.dataset}/test_targets_bop19.json'))
 inst_count = recursive_dict()
 target_count = 0
 for t in targets_raw:
@@ -35,11 +36,14 @@ for t in targets_raw:
     target_count += t['inst_count']
 print('target count', target_count)
 
-results = torch.load(f'../cosypose/local_data/results/bop-pbr--223026/dataset={args.dataset}/results.pth.tar')
+results = torch.load(
+    f'../cosypose/local_data/results/bop-pbr--223026/dataset={args.dataset}/'
+    'results.pth.tar')
 preds = results['predictions']
 detections = preds['maskrcnn_detections/detections']
 infos = preds['maskrcnn_detections/coarse/iteration=1'].infos
-times = infos.time.to_numpy()  # times for detection results only are not available
+times = infos.time.to_numpy(
+)  # times for detection results only are not available
 scene_ids = infos.scene_id.to_numpy()
 view_ids = infos.view_id.to_numpy()
 scores = infos.score.to_numpy()
@@ -56,8 +60,10 @@ for scene_id in sorted(inst_count.keys()):
         inst_count_view = inst_count_scene[view_id]
         view_mask = view_ids == view_id
         if debug:
-            img = cv2.imread(f'bop/{args.dataset}/{cfg.test_folder}/{scene_id:06d}/{cfg.img_folder}/'
-                             f'{view_id:06d}.{cfg.img_ext}')
+            img = cv2.imread(
+                f'bop/{args.dataset}/{cfg.test_folder}/{scene_id:06d}/'
+                f'{cfg.img_folder}/'
+                f'{view_id:06d}.{cfg.img_ext}')
         break_view = False
         for obj_id in sorted(inst_count_view.keys()):
             obj_mask = obj_ids == obj_id
@@ -65,14 +71,19 @@ for scene_id in sorted(inst_count.keys()):
             arg_mask = np.argwhere(mask).reshape(-1)
             mask_all[arg_mask] = True
             if debug:
-                print(f'obj_id: {obj_id}, n_targets: {inst_count_view[obj_id]}, n_est: {mask.sum()}')
+                print(
+                    f'obj_id: {obj_id}, n_targets: {inst_count_view[obj_id]}, '
+                    f'n_est: {mask.sum()}')
                 print('scores: ', scores[arg_mask])
                 img_ = img.copy()
                 for j, i in enumerate(arg_mask):
                     l, t, r, b = bboxes[i]
-                    c = (0, 255, 0) if j < inst_count_view[obj_id] else (0, 0, 255)
+                    c = (0, 255, 0) if j < inst_count_view[obj_id] else (0, 0,
+                                                                         255)
                     cv2.rectangle(img_, (l, t), (r, b), c)
-                    cv2.putText(img_, f'{scores[i]:.4f}', (int(l) + 2, int(b) - 2), cv2.FONT_HERSHEY_PLAIN, 1, c)
+                    cv2.putText(img_, f'{scores[i]:.4f}',
+                                (int(l) + 2, int(b) - 2),
+                                cv2.FONT_HERSHEY_PLAIN, 1, c)
                 cv2.imshow('', img_)
                 key = cv2.waitKey()
                 if key == ord('q'):

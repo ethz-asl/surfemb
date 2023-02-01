@@ -21,7 +21,9 @@ parser.add_argument('--res-data', type=int, default=256)
 parser.add_argument('--res-crop', type=int, default=224)
 parser.add_argument('--max-poses', type=int, default=10000)
 parser.add_argument('--max-pose-evaluations', type=int, default=1000)
-parser.add_argument('--no-rotation-ensemble', dest='rotation_ensemble', action='store_false')
+parser.add_argument('--no-rotation-ensemble',
+                    dest='rotation_ensemble',
+                    action='store_false')
 
 args = parser.parse_args()
 res_crop = args.res_crop
@@ -40,7 +42,8 @@ for fp in poses_fp, poses_scores_fp, poses_timings_fp:
     assert not fp.exists()
 
 # load model
-model = SurfaceEmbeddingModel.load_from_checkpoint(str(model_path)).eval().to(device)  # type: SurfaceEmbeddingModel
+model = SurfaceEmbeddingModel.load_from_checkpoint(str(model_path)).eval().to(
+    device)  # type: SurfaceEmbeddingModel
 model.freeze()
 
 # load data
@@ -48,12 +51,16 @@ root = Path('data/bop') / dataset
 cfg = config[dataset]
 objs, obj_ids = load_objs(root / cfg.model_folder)
 assert len(obj_ids) > 0
-surface_samples, surface_sample_normals = utils.load_surface_samples(dataset, obj_ids)
+surface_samples, surface_sample_normals = utils.load_surface_samples(
+    dataset, obj_ids)
 data = detector_crops.DetectorCropDataset(
-    dataset_root=root, cfg=cfg, obj_ids=obj_ids,
+    dataset_root=root,
+    cfg=cfg,
+    obj_ids=obj_ids,
     detection_folder=Path(f'data/detection_results/{dataset}'),
-    auxs=model.get_infer_auxs(objs=objs, crop_res=res_crop, from_detections=True)
-)
+    auxs=model.get_infer_auxs(objs=objs,
+                              crop_res=res_crop,
+                              from_detections=True))
 renderer = ObjCoordRenderer(objs, w=res_crop, h=res_crop)
 
 # infer
@@ -68,35 +75,50 @@ def infer(i, d):
     K_crop = d['K_crop']
 
     with utils.add_timing_to_list(time_forward):
-        mask_lgts, query_img = model.infer_cnn(img, obj_idx, rotation_ensemble=args.rotation_ensemble)
+        mask_lgts, query_img = model.infer_cnn(
+            img, obj_idx, rotation_ensemble=args.rotation_ensemble)
         mask_lgts[0, 0].item()  # synchronize for timing
 
-        # keys are independent of input (could be cached, but it's not the bottleneck)
+        # keys are independent of input (could be cached, but it's not the
+        # bottleneck)
         obj_ = objs[obj_idx]
         verts = surface_samples[obj_idx]
         verts_norm = (verts - obj_.offset) / obj_.scale
-        obj_keys = model.infer_mlp(torch.from_numpy(verts_norm).float().to(device), obj_idx)
+        obj_keys = model.infer_mlp(
+            torch.from_numpy(verts_norm).float().to(device), obj_idx)
         verts = torch.from_numpy(verts).float().to(device)
 
     with utils.add_timing_to_list(time_pnpransac):
         R_est, t_est, scores, *_ = estimate_pose(
-            mask_lgts=mask_lgts, query_img=query_img,
-            obj_pts=verts, obj_normals=surface_sample_normals[obj_idx], obj_keys=obj_keys,
-            obj_diameter=obj_.diameter, K=K_crop,
+            mask_lgts=mask_lgts,
+            query_img=query_img,
+            obj_pts=verts,
+            obj_normals=surface_sample_normals[obj_idx],
+            obj_keys=obj_keys,
+            obj_diameter=obj_.diameter,
+            K=K_crop,
         )
         success = len(scores) > 0
         if success:
             best_idx = torch.argmax(scores).item()
             all_scores[i] = scores[best_idx].item()
-            R_est, t_est = R_est[best_idx].cpu().numpy(), t_est[best_idx].cpu().numpy()[:, None]
+            R_est, t_est = R_est[best_idx].cpu().numpy(), t_est[best_idx].cpu(
+            ).numpy()[:, None]
         else:
             R_est, t_est = np.eye(3), np.zeros((3, 1))
 
     with utils.add_timing_to_list(time_refine):
         if success:
             R_est_r, t_est_r, score_r = refine_pose(
-                R=R_est, t=t_est, query_img=query_img, K_crop=K_crop,
-                renderer=renderer, obj_idx=obj_idx, obj_=obj_, model=model, keys_verts=obj_keys,
+                R=R_est,
+                t=t_est,
+                query_img=query_img,
+                K_crop=K_crop,
+                renderer=renderer,
+                obj_idx=obj_idx,
+                obj_=obj_,
+                model=model,
+                keys_verts=obj_keys,
             )
         else:
             R_est_r, t_est_r = R_est, t_est
@@ -113,10 +135,8 @@ time_forward = np.array(time_forward)
 time_pnpransac = np.array(time_pnpransac)
 time_refine = np.array(time_refine)
 
-timings = np.stack((
-    time_forward + time_pnpransac,
-    time_forward + time_pnpransac + time_refine
-))
+timings = np.stack((time_forward + time_pnpransac,
+                    time_forward + time_pnpransac + time_refine))
 
 np.save(str(poses_fp), all_poses)
 np.save(str(poses_scores_fp), all_scores)

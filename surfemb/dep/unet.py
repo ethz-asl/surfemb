@@ -14,6 +14,7 @@ def convrelu(in_channels, out_channels, kernel, padding):
 
 
 class ResNetUNet(nn.Module):
+
     def __init__(self, n_class, feat_preultimate=64, n_decoders=1):
         super().__init__()
 
@@ -21,27 +22,33 @@ class ResNetUNet(nn.Module):
         self.base_model = torchvision.models.resnet18(pretrained=True)
         self.base_layers = list(self.base_model.children())
 
-        self.layer0 = nn.Sequential(*self.base_layers[:3])  # size=(N, 64, x.H/2, x.W/2)
-        self.layer1 = nn.Sequential(*self.base_layers[3:5])  # size=(N, 64, x.H/4, x.W/4)
+        self.layer0 = nn.Sequential(
+            *self.base_layers[:3])  # size=(N, 64, x.H/2, x.W/2)
+        self.layer1 = nn.Sequential(
+            *self.base_layers[3:5])  # size=(N, 64, x.H/4, x.W/4)
         self.layer2 = self.base_layers[5]  # size=(N, 128, x.H/8, x.W/8)
         self.layer3 = self.base_layers[6]  # size=(N, 256, x.H/16, x.W/16)
         self.layer4 = self.base_layers[7]  # size=(N, 512, x.H/32, x.W/32)
 
         #  n_decoders
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        self.decoders = [dict(
-            layer0_1x1=convrelu(64, 64, 1, 0),
-            layer1_1x1=convrelu(64, 64, 1, 0),
-            layer2_1x1=convrelu(128, 128, 1, 0),
-            layer3_1x1=convrelu(256, 256, 1, 0),
-            layer4_1x1=convrelu(512, 512, 1, 0),
-            conv_up3=convrelu(256 + 512, 512, 3, 1),
-            conv_up2=convrelu(128 + 512, 256, 3, 1),
-            conv_up1=convrelu(64 + 256, 256, 3, 1),
-            conv_up0=convrelu(64 + 256, 128, 3, 1),
-            conv_original_size=convrelu(128, feat_preultimate, 3, 1),
-            conv_last=nn.Conv2d(feat_preultimate, n_class, 1),
-        ) for _ in range(n_decoders)]
+        self.upsample = nn.Upsample(scale_factor=2,
+                                    mode='bilinear',
+                                    align_corners=False)
+        self.decoders = [
+            dict(
+                layer0_1x1=convrelu(64, 64, 1, 0),
+                layer1_1x1=convrelu(64, 64, 1, 0),
+                layer2_1x1=convrelu(128, 128, 1, 0),
+                layer3_1x1=convrelu(256, 256, 1, 0),
+                layer4_1x1=convrelu(512, 512, 1, 0),
+                conv_up3=convrelu(256 + 512, 512, 3, 1),
+                conv_up2=convrelu(128 + 512, 256, 3, 1),
+                conv_up1=convrelu(64 + 256, 256, 3, 1),
+                conv_up0=convrelu(64 + 256, 128, 3, 1),
+                conv_original_size=convrelu(128, feat_preultimate, 3, 1),
+                conv_last=nn.Conv2d(feat_preultimate, n_class, 1),
+            ) for _ in range(n_decoders)
+        ]
 
         # register decoder modules
         for i, decoder in enumerate(self.decoders):
@@ -67,7 +74,8 @@ class ResNetUNet(nn.Module):
         out = []
         for i, dec_idx in enumerate(decoder_idx):
             decoder = self.decoders[dec_idx]
-            batch_slice = slice(None) if len(decoder_idx) == 1 else slice(i, i + 1)
+            batch_slice = slice(None) if len(decoder_idx) == 1 else slice(
+                i, i + 1)
 
             x = decoder['layer4_1x1'](layer4[batch_slice])
             x = self.upsample(x)

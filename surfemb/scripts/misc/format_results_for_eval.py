@@ -9,15 +9,21 @@ from ...data.config import config
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset')
 parser.add_argument('poses')
-parser.add_argument('--dont-use-refinement', dest='use_refinement', action='store_false')
-parser.add_argument('--dont-use-pose-score', dest='use_pose_score', action='store_false')
+parser.add_argument('--dont-use-refinement',
+                    dest='use_refinement',
+                    action='store_false')
+parser.add_argument('--dont-use-pose-score',
+                    dest='use_pose_score',
+                    action='store_false')
 args = parser.parse_args()
 
 detection_path = Path('data/detection_results') / args.dataset
 poses_fp = Path(args.poses)
 
-name = '-'.join(poses_fp.name.split('-')[:-1])  # dataset, run_id, [optionally "depth"]
-pose_scores_fp = poses_fp.parent / f'{name.replace("-depth", "")}-poses-scores.npy'
+name = '-'.join(
+    poses_fp.name.split('-')[:-1])  # dataset, run_id, [optionally "depth"]
+pose_scores_fp = poses_fp.parent / (f'{name.replace("-depth", "")}'
+                                    '-poses-scores.npy')
 pose_timings_fp = poses_fp.parent / f'{name}-poses-timings.npy'
 
 poses = np.load(str(poses_fp))
@@ -61,7 +67,6 @@ if args.use_pose_score:
     name += '-pose-score'
 
 with open(
-        f'data/results/{name}_{args.dataset}-{config[args.dataset].test_folder}.csv'
-        , 'w'
-) as f:
+        f'data/results/{name}_{args.dataset}-{config[args.dataset].test_folder}'
+        '.csv', 'w') as f:
     f.writelines(lines)

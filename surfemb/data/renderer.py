@@ -25,22 +25,31 @@ def projection_matrix(K, w, h, near=10., far=10000.):  # 1 cm to 10 m
     persp[:2, :3] = K[:2, :3]
     persp[2, 2:] = near + far, near * far
     persp[3, 2] = -1
-    # transform the camera matrix from cv2 to opengl as well (flipping sign of y and z)
+    # transform the camera matrix from cv2 to opengl as well (flipping sign of y
+    # and z)
     persp[:2, 1:3] *= -1
 
     # The origin of the image is in the *center* of the top left pixel.
-    # The orthographic matrix should map the whole image *area* into the opengl NDC, therefore the -.5 below:
+    # The orthographic matrix should map the whole image *area* into the opengl
+    # NDC, therefore the -.5 below:
     orth = orthographic_matrix(-.5, w - .5, -.5, h - .5, near, far)
     return orth @ persp @ view
 
 
 class ObjCoordRenderer:
-    def __init__(self, objs: Sequence[Obj], w: int, h: int = None, device_idx=0):
+
+    def __init__(self,
+                 objs: Sequence[Obj],
+                 w: int,
+                 h: int = None,
+                 device_idx=0):
         self.objs = objs
         if h is None:
             h = w
         self.h, self.w = h, w
-        self.ctx = moderngl.create_context(standalone=True, backend='egl', device_index=device_idx)
+        self.ctx = moderngl.create_context(standalone=True,
+                                           backend='egl',
+                                           device_index=device_idx)
         self.ctx.disable(moderngl.CULL_FACE)
         self.ctx.enable(moderngl.DEPTH_TEST)
         self.fbo = self.ctx.simple_framebuffer((w, h), components=4, dtype='f4')
@@ -72,16 +81,21 @@ class ObjCoordRenderer:
         self.vaos = []
         for obj in self.objs:
             vertices = obj.mesh.vertices[obj.mesh.faces].astype('f4')  # (n, 3)
-            vao = self.ctx.simple_vertex_array(self.prog, self.ctx.buffer(vertices), 'in_vert')
+            vao = self.ctx.simple_vertex_array(self.prog,
+                                               self.ctx.buffer(vertices),
+                                               'in_vert')
             self.vaos.append(vao)
 
     def read(self):
-        return np.frombuffer(self.fbo.read(components=4, dtype='f4'), 'f4').reshape((self.h, self.w, 4))
+        return np.frombuffer(self.fbo.read(components=4, dtype='f4'),
+                             'f4').reshape((self.h, self.w, 4))
 
     def read_depth(self):
-        depth = np.frombuffer(self.fbo.read(attachment=-1, dtype='f4'), 'f4').reshape(self.h, self.w)
+        depth = np.frombuffer(self.fbo.read(attachment=-1, dtype='f4'),
+                              'f4').reshape(self.h, self.w)
         neg_mask = depth == 1
-        near, far = 10., 10000.  # TODO: use projection matrix instead of the default values
+        # TODO: use projection matrix instead of the default values
+        near, far = 10., 10000.
         depth = 2 * depth - 1
         depth = 2 * near * far / (far + near - depth * (far - near))
         depth[neg_mask] = 0
@@ -114,4 +128,5 @@ class ObjCoordRenderer:
         return model_coords_img[..., 3] == 255
 
     def denormalize(self, model_coords: np.ndarray, obj_idx: int):
-        return model_coords * self.objs[obj_idx].scale + self.objs[obj_idx].offset
+        return model_coords * self.objs[obj_idx].scale + self.objs[
+            obj_idx].offset

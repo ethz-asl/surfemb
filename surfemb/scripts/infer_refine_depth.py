@@ -5,7 +5,8 @@ Depth refinement:
 * use query norm threshold to estimate a conservative 2d mask
   (estimating the visible mask in the encoder-decoder would make more sense.)
 * find median of depth difference within the 2d mask (ignoring invalid depth)
-* find com with respect to the 2d mask and use that as the ray to adjust the depth along
+* find com with respect to the 2d mask and use that as the ray to adjust the
+  depth along
 """
 
 import argparse
@@ -56,9 +57,11 @@ model.freeze()
 
 objs, obj_ids = load_objs(root / cfg.model_folder)
 dataset = DetectorCropDataset(
-    dataset_root=root, obj_ids=obj_ids, cfg=cfg, detection_folder=Path(f'data/detection_results/{dataset}'),
-    auxs=model.get_infer_auxs(objs=objs, crop_res=crop_res)
-)
+    dataset_root=root,
+    obj_ids=obj_ids,
+    cfg=cfg,
+    detection_folder=Path(f'data/detection_results/{dataset}'),
+    auxs=model.get_infer_auxs(objs=objs, crop_res=crop_res))
 assert poses.shape[1] == len(dataset)
 
 crop_renderer = ObjCoordRenderer(objs=objs, w=crop_res, h=crop_res)
@@ -74,29 +77,42 @@ for j in range(2):
         obj_idx, K_crop, K = d['obj_idx'], d['K_crop'], d['K']
 
         depth_sensor = cv2.imread(
-            str(test_folder / f'{d["scene_id"]:06d}/depth/{d["img_id"]:06d}.{cfg.depth_ext}'),
-            cv2.IMREAD_UNCHANGED
-        )
+            str(test_folder /
+                f'{d["scene_id"]:06d}/depth/{d["img_id"]:06d}.{cfg.depth_ext}'),
+            cv2.IMREAD_UNCHANGED)
         scene_camera_fp = test_folder / f'{d["scene_id"]:06d}/scene_camera.json'
-        depth_scale = json.load(scene_camera_fp.open())[str(d['img_id'])]['depth_scale']
+        depth_scale = json.load(scene_camera_fp.open())[str(
+            d['img_id'])]['depth_scale']
         depth_sensor = depth_sensor * depth_scale
         h, w = depth_sensor.shape
 
-        mask_lgts, query_img = [v.cpu() for v in model.infer_cnn(d['rgb_crop'], obj_idx)]
+        mask_lgts, query_img = [
+            v.cpu() for v in model.infer_cnn(d['rgb_crop'], obj_idx)
+        ]
         # the above either doesn't count towards the time (loading images),
-        # or has already been done in the initial pose estimate (cnn forward pass)
-        # so timing starts here:
+        # or has already been done in the initial pose estimate (cnn forward
+        # pass) so timing starts here:
         with add_timing_to_list(depth_timings):
             depth_sensor_mask = (depth_sensor > 0).astype(np.float32)
             M = (K_crop @ np.linalg.inv(K))[:2]
-            depth_sensor_mask_crop = cv2.warpAffine(depth_sensor_mask, M, (crop_res, crop_res),
-                                                    flags=cv2.INTER_LINEAR) == 1.
-            depth_sensor_crop = cv2.warpAffine(depth_sensor, M, (crop_res, crop_res), flags=cv2.INTER_LINEAR)
-            depth_render = crop_renderer.render(obj_idx, K_crop, R, t, read_depth=True)
+            depth_sensor_mask_crop = cv2.warpAffine(
+                depth_sensor_mask,
+                M, (crop_res, crop_res),
+                flags=cv2.INTER_LINEAR) == 1.
+            depth_sensor_crop = cv2.warpAffine(depth_sensor,
+                                               M, (crop_res, crop_res),
+                                               flags=cv2.INTER_LINEAR)
+            depth_render = crop_renderer.render(obj_idx,
+                                                K_crop,
+                                                R,
+                                                t,
+                                                read_depth=True)
             render_mask = depth_render > 0
 
-            query_img_norm = torch.norm(query_img, dim=-1) * torch.sigmoid(mask_lgts)
-            query_img_norm = query_img_norm.numpy() * render_mask * depth_sensor_mask_crop
+            query_img_norm = torch.norm(query_img,
+                                        dim=-1) * torch.sigmoid(mask_lgts)
+            query_img_norm = query_img_norm.numpy(
+            ) * render_mask * depth_sensor_mask_crop
             norm_sum = query_img_norm.sum()
             if norm_sum == 0:
                 n_failed += 1
@@ -108,8 +124,10 @@ for j in range(2):
             depth_adjustment = np.median(depth_diff)
 
             yx_coords = np.meshgrid(np.arange(crop_res), np.arange(crop_res))
-            yx_coords = np.stack(yx_coords[::-1], axis=-1)  # (crop_res, crop_res, 2yx)
-            yx_ray_2d = (yx_coords * query_img_norm[..., None]).sum(axis=(0, 1))  # y, x
+            yx_coords = np.stack(yx_coords[::-1],
+                                 axis=-1)  # (crop_res, crop_res, 2yx)
+            yx_ray_2d = (yx_coords * query_img_norm[..., None]).sum(
+                axis=(0, 1))  # y, x
             ray_3d = np.linalg.inv(K_crop) @ (*yx_ray_2d[::-1], 1)
             ray_3d /= ray_3d[2]
 
@@ -139,12 +157,14 @@ for j in range(2):
             axs[2, 0].imshow(d['rgb_crop'])
             axs[2, 0].imshow(render_mask, alpha=0.5)
             axs[2, 0].set_title('initial pose')
-            render_mask_after = crop_renderer.render(obj_idx, K_crop, R, t_depth_refined, read_depth=True) > 0
+            render_mask_after = crop_renderer.render(
+                obj_idx, K_crop, R, t_depth_refined, read_depth=True) > 0
             axs[2, 1].imshow(d['rgb_crop'])
             axs[2, 1].imshow(render_mask_after, alpha=0.5)
             axs[2, 1].set_title('pose after depth refine')
             axs[2, 3].hist(depth_diff)
-            axs[2, 3].plot([depth_adjustment, depth_adjustment], [0, max(axs[2, 3].get_ylim())])
+            axs[2, 3].plot([depth_adjustment, depth_adjustment],
+                           [0, max(axs[2, 3].get_ylim())])
             axs[2, 3].set_title('depth diff. hist.')
             for ax in axs.reshape(-1)[:-1]:
                 ax.axis('off')

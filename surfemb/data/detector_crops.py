@@ -12,9 +12,15 @@ from .instance import BopInstanceAux
 
 
 class DetectorCropDataset(torch.utils.data.Dataset):
+
     def __init__(
-            self, dataset_root: Path, obj_ids, detection_folder: Path, cfg: DatasetConfig,
-            auxs: Sequence[BopInstanceAux], show_progressbar=True,
+        self,
+        dataset_root: Path,
+        obj_ids,
+        detection_folder: Path,
+        cfg: DatasetConfig,
+        auxs: Sequence[BopInstanceAux],
+        show_progressbar=True,
     ):
         self.data_folder = dataset_root / cfg.test_folder
         self.img_folder = cfg.img_folder
@@ -30,13 +36,20 @@ class DetectorCropDataset(torch.utils.data.Dataset):
 
         self.auxs = auxs
         self.instances = []
-        scene_ids = sorted([int(scene_dir.name) for scene_dir in self.data_folder.glob('*') if scene_dir.is_dir()])
+        scene_ids = sorted([
+            int(scene_dir.name)
+            for scene_dir in self.data_folder.glob('*')
+            if scene_dir.is_dir()
+        ])
 
         self.scene_cameras = defaultdict(lambda *_: [])
 
-        for scene_id in tqdm(scene_ids, 'loading crop info') if show_progressbar else scene_ids:
+        for scene_id in tqdm(
+                scene_ids,
+                'loading crop info') if show_progressbar else scene_ids:
             scene_folder = self.data_folder / f'{scene_id:06d}'
-            self.scene_cameras[scene_id] = json.load((scene_folder / 'scene_camera.json').open())
+            self.scene_cameras[scene_id] = json.load(
+                (scene_folder / 'scene_camera.json').open())
 
         for aux in self.auxs:
             aux.init(self)
@@ -45,11 +58,18 @@ class DetectorCropDataset(torch.utils.data.Dataset):
         return len(self.bboxes)
 
     def __getitem__(self, i):
-        scene_id, view_id, obj_id = self.scene_ids[i], self.view_ids[i], self.obj_ids[i]
+        scene_id, view_id, obj_id = self.scene_ids[i], self.view_ids[
+            i], self.obj_ids[i]
         instance = dict(
-            scene_id=scene_id, img_id=view_id, obj_id=obj_id, obj_idx=self.obj_idxs[obj_id],
-            K=np.array(self.scene_cameras[scene_id][str(view_id)]['cam_K']).reshape((3, 3)),
-            mask_visib=self.bboxes[i], bbox=self.bboxes[i].round().astype(int),
+            scene_id=scene_id,
+            img_id=view_id,
+            obj_id=obj_id,
+            obj_idx=self.obj_idxs[obj_id],
+            K=np.array(
+                self.scene_cameras[scene_id][str(view_id)]['cam_K']).reshape(
+                    (3, 3)),
+            mask_visib=self.bboxes[i],
+            bbox=self.bboxes[i].round().astype(int),
         )
         for aux in self.auxs:
             instance = aux(instance, self)
@@ -72,11 +92,16 @@ def _main():
     objs, obj_ids = load_objs(dataset_root / cfg.model_folder, None)
 
     data = DetectorCropDataset(
-        dataset_root=dataset_root, cfg=cfg, obj_ids=obj_ids,
+        dataset_root=dataset_root,
+        cfg=cfg,
+        obj_ids=obj_ids,
         detection_folder=Path(f'detection_results/{args.dataset}'),
         auxs=(
             std_auxs.RgbLoader(),
-            std_auxs.RandomRotatedMaskCrop(224, max_angle=0, offset_scale=0, use_bbox=True),
+            std_auxs.RandomRotatedMaskCrop(224,
+                                           max_angle=0,
+                                           offset_scale=0,
+                                           use_bbox=True),
         ),
     )
     while True:

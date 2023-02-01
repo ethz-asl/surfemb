@@ -34,8 +34,12 @@ for mesh_fp in tqdm(list(remesh_folder.glob('*.ply'))):
         n_actual_samples = ms.current_mesh().vertex_number()
         print(n_actual_samples)
         if n_actual_samples >= n_samples:
-            ms.save_current_mesh(str(samples_fp.absolute()), save_vertex_normal=False, save_textures=False,
-                                 save_vertex_quality=False, save_vertex_color=False, save_vertex_coord=False,
+            ms.save_current_mesh(str(samples_fp.absolute()),
+                                 save_vertex_normal=False,
+                                 save_textures=False,
+                                 save_vertex_quality=False,
+                                 save_vertex_color=False,
+                                 save_vertex_coord=False,
                                  save_vertex_radius=False)
             break
         else:

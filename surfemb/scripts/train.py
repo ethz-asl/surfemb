@@ -64,14 +64,26 @@ def main():
     data = utils.EmptyDataset()
     if args.synth:
         data += instance.BopInstanceDataset(
-            dataset_root=root, pbr=True, test=False, cfg=cfg, obj_ids=obj_ids, auxs=auxs,
-            min_visib_fract=args.min_visib_fract, scene_ids=[1] if debug else None,
+            dataset_root=root,
+            pbr=True,
+            test=False,
+            cfg=cfg,
+            obj_ids=obj_ids,
+            auxs=auxs,
+            min_visib_fract=args.min_visib_fract,
+            scene_ids=[1] if debug else None,
         )
     if args.real:
         assert args.dataset in {'tless', 'tudl', 'ycbv'}
         data_real = instance.BopInstanceDataset(
-            dataset_root=root, pbr=False, test=False, cfg=cfg, obj_ids=obj_ids, auxs=auxs,
-            min_visib_fract=args.min_visib_fract, scene_ids=[1] if debug else None,
+            dataset_root=root,
+            pbr=False,
+            test=False,
+            cfg=cfg,
+            obj_ids=obj_ids,
+            auxs=auxs,
+            min_visib_fract=args.min_visib_fract,
+            scene_ids=[1] if debug else None,
         )
         if args.synth:
             data = utils.balanced_dataset_concat(data, data_real)
@@ -80,17 +92,23 @@ def main():
 
     n_valid = args.n_valid
     data_train, data_valid = torch.utils.data.random_split(
-        data, (len(data) - n_valid, n_valid),
+        data,
+        (len(data) - n_valid, n_valid),
         generator=torch.Generator().manual_seed(0),
     )
 
     loader_args = dict(
         batch_size=args.batch_size,
-        num_workers=torch.get_num_threads() if args.num_workers is None else args.num_workers,
-        persistent_workers=True, shuffle=True,
-        worker_init_fn=worker_init_fn, pin_memory=True,
+        num_workers=torch.get_num_threads()
+        if args.num_workers is None else args.num_workers,
+        persistent_workers=True,
+        shuffle=True,
+        worker_init_fn=worker_init_fn,
+        pin_memory=True,
     )
-    loader_train = torch.utils.data.DataLoader(data_train, drop_last=True, **loader_args)
+    loader_train = torch.utils.data.DataLoader(data_train,
+                                               drop_last=True,
+                                               **loader_args)
     loader_valid = torch.utils.data.DataLoader(data_valid, **loader_args)
 
     # train
@@ -102,16 +120,21 @@ def main():
     logger = pl.loggers.WandbLogger(experiment=run)
     logger.log_hyperparams(args)
 
-    model_ckpt_cb = pl.callbacks.ModelCheckpoint(dirpath='data/models/', save_top_k=0, save_last=True)
+    model_ckpt_cb = pl.callbacks.ModelCheckpoint(dirpath='data/models/',
+                                                 save_top_k=0,
+                                                 save_last=True)
     model_ckpt_cb.CHECKPOINT_NAME_LAST = f'{args.dataset}-{run.id}'
     trainer = pl.Trainer(
         resume_from_checkpoint=args.ckpt,
-        logger=logger, gpus=args.gpus, max_steps=args.max_steps,
+        logger=logger,
+        gpus=args.gpus,
+        max_steps=args.max_steps,
         callbacks=[
             pl.callbacks.LearningRateMonitor(),
             model_ckpt_cb,
         ],
-        val_check_interval=min(1., n_valid / len(data) * 50)  # spend ~1/50th of the time on validation
+        val_check_interval=min(1., n_valid / len(data) *
+                               50)  # spend ~1/50th of the time on validation
     )
     trainer.fit(model, loader_train, loader_valid)
 

@@ -43,13 +43,22 @@ def balanced_dataset_concat(a, b):
 
 
 def load_surface_samples(dataset, obj_ids, root=Path('data')):
-    surface_samples = [trimesh.load_mesh(root / f'surface_samples/{dataset}/obj_{i:06d}.ply').vertices for i in obj_ids]
-    surface_sample_normals = [trimesh.load_mesh(root / f'surface_samples_normals/{dataset}/obj_{i:06d}.ply').vertices
-                              for i in obj_ids]
+    surface_samples = [
+        trimesh.load_mesh(root /
+                          f'surface_samples/{dataset}/obj_{i:06d}.ply').vertices
+        for i in obj_ids
+    ]
+    surface_sample_normals = [
+        trimesh.load_mesh(
+            root /
+            f'surface_samples_normals/{dataset}/obj_{i:06d}.ply').vertices
+        for i in obj_ids
+    ]
     return surface_samples, surface_sample_normals
 
 
 class Rodrigues(torch.autograd.Function):
+
     @staticmethod
     def forward(ctx, rvec):
         R, jac = cv2.Rodrigues(rvec.detach().cpu().numpy())
@@ -85,6 +94,7 @@ def rotate_batch_back(batch: torch.Tensor):  # (4, ..., H, H) -> (4, ..., H, H)
 
 
 class EmptyDataset(torch.utils.data.Dataset):
+
     def __len__(self):
         return 0
 

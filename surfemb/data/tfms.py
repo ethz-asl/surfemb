@@ -19,11 +19,15 @@ def normalize(img: np.ndarray):  # (h, w, 3) -> (3, h, w)
 def denormalize(img: Union[np.ndarray, torch.Tensor]):
     mu, std = imagenet_stats
     if isinstance(img, torch.Tensor):
-        mu, std = [torch.Tensor(v).type(img.dtype).to(img.device)[:, None, None] for v in (mu, std)]
+        mu, std = [
+            torch.Tensor(v).type(img.dtype).to(img.device)[:, None, None]
+            for v in (mu, std)
+        ]
     return img * std + mu
 
 
 class Unsharpen(A.ImageOnlyTransform):
+
     def __init__(self, k_limits=(3, 7), strength_limits=(0., 2.), p=0.5):
         super().__init__()
         self.k_limits = k_limits
@@ -33,7 +37,8 @@ class Unsharpen(A.ImageOnlyTransform):
     def apply(self, img, **params):
         if np.random.rand() > self.p:
             return img
-        k = np.random.randint(self.k_limits[0] // 2, self.k_limits[1] // 2 + 1) * 2 + 1
+        k = np.random.randint(self.k_limits[0] // 2,
+                              self.k_limits[1] // 2 + 1) * 2 + 1
         s = k / 3
         blur = cv2.GaussianBlur(img, (k, k), s)
         strength = np.random.uniform(*self.strength_limits)
@@ -42,6 +47,7 @@ class Unsharpen(A.ImageOnlyTransform):
 
 
 class DebayerArtefacts(A.ImageOnlyTransform):
+
     def __init__(self, p=0.5):
         super().__init__()
         self.p = p
@@ -50,7 +56,8 @@ class DebayerArtefacts(A.ImageOnlyTransform):
         if np.random.rand() > self.p:
             return img
         assert img.dtype == np.uint8
-        # permute channels before bayering/debayering to cover different bayer formats
+        # permute channels before bayering/debayering to cover different bayer
+        # formats
         channel_idxs = np.random.permutation(3)
         channel_idxs_inv = np.empty(3, dtype=int)
         channel_idxs_inv[channel_idxs] = 0, 1, 2
@@ -63,6 +70,7 @@ class DebayerArtefacts(A.ImageOnlyTransform):
         bayer[1::2, 1::2] = img[1::2, 1::2, channel_idxs[0]]
 
         # debayer
-        debayer_method = np.random.choice((cv2.COLOR_BAYER_BG2BGR, cv2.COLOR_BAYER_BG2BGR_EA))
+        debayer_method = np.random.choice(
+            (cv2.COLOR_BAYER_BG2BGR, cv2.COLOR_BAYER_BG2BGR_EA))
         debayered = cv2.cvtColor(bayer, debayer_method)[..., channel_idxs_inv]
         return debayered

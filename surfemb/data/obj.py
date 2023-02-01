@@ -8,6 +8,7 @@ import trimesh
 
 
 class Obj:
+
     def __init__(self, obj_id, mesh: trimesh.Trimesh, diameter: float):
         self.obj_id = obj_id
         self.mesh = mesh
@@ -34,10 +35,13 @@ def load_obj(models_root: Path, obj_id: int):
     return Obj(obj_id, mesh, diameter)
 
 
-def load_objs(models_root: Path, obj_ids: Iterable[int] = None, show_progressbar=True):
+def load_objs(models_root: Path,
+              obj_ids: Iterable[int] = None,
+              show_progressbar=True):
     objs = []
     if obj_ids is None:
         obj_ids = sorted([int(p.name[4:10]) for p in models_root.glob('*.ply')])
-    for obj_id in tqdm(obj_ids, 'loading objects') if show_progressbar else obj_ids:
+    for obj_id in tqdm(obj_ids,
+                       'loading objects') if show_progressbar else obj_ids:
         objs.append(load_obj(models_root, obj_id))
     return objs, obj_ids

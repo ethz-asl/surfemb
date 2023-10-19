@@ -65,7 +65,8 @@ class SurfaceSampleAux(BopInstanceAux):
     def __call__(self, inst: dict, _) -> dict:
         obj = self.objs[inst['obj_idx']]
         mesh = obj.mesh_norm if self.norm else obj.mesh
-        inst['surface_samples'] = mesh.sample(self.n_samples).astype(np.float32)
+        inst['surface_samples'] = np.array(mesh.sample(self.n_samples)).astype(
+            np.float32)
         return inst
 
 

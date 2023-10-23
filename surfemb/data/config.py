@@ -1,4 +1,5 @@
 from collections import defaultdict
+import yaml
 
 
 class DatasetConfig:
@@ -9,6 +10,22 @@ class DatasetConfig:
     depth_folder = 'depth'
     img_ext = 'png'
     depth_ext = 'png'
+
+    @classmethod
+    def from_yaml(cls, yaml_file_path: str):
+        with open(yaml_file_path, "r") as f:
+            cfg_yaml = yaml.load(f, Loader=yaml.SafeLoader)
+
+        cfg = DatasetConfig()
+
+        assert (sorted(cfg_yaml.keys()) == sorted([
+            'model_folder', 'train_folder', 'test_folder', 'img_folder',
+            'depth_folder', 'img_ext', 'depth_ext'
+        ]))
+        for key in cfg_yaml.keys():
+            setattr(cfg, key, cfg_yaml[key])
+
+        return cfg
 
 
 config = defaultdict(lambda *_: DatasetConfig())

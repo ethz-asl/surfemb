@@ -66,8 +66,8 @@ class BopInstanceDataset(torch.utils.data.Dataset):
                     (3, 3)).copy()
                 if pbr:
                     warnings.warn(
-                        'Altering camera matrix, since PBR camera matrix doesnt seem to be correct'
-                    )
+                        "Altering camera matrix, since PBR camera matrix "
+                        "doesn't seem to be correct")
                     K[:2, 2] -= 0.5
 
                 for pose_idx, pose in enumerate(poses):
@@ -75,9 +75,11 @@ class BopInstanceDataset(torch.utils.data.Dataset):
                     if obj_ids is not None and obj_id not in obj_ids:
                         continue
                     pose_info = img_info[pose_idx]
-                    if pose_info['visib_fract'] < min_visib_fract:
+                    if ('visib_fract' in pose_info and
+                            pose_info['visib_fract'] < min_visib_fract):
                         continue
-                    if pose_info['px_count_visib'] < min_px_count_visib:
+                    if ('px_count_visib' in pose_info and
+                            pose_info['px_count_visib'] < min_px_count_visib):
                         continue
 
                     bbox_visib = pose_info['bbox_visib']

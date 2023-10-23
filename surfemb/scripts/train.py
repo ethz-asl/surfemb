@@ -8,7 +8,7 @@ import wandb
 
 from .. import utils
 from ..data import obj, instance
-from ..data.config import config
+from ..data.config import config, DatasetConfig
 from ..surface_embedding import SurfaceEmbeddingModel
 
 
@@ -29,6 +29,7 @@ def worker_init_fn(*_):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset')
+    parser.add_argument('--neus2-dataset', action='store_true')
     parser.add_argument('--n-valid', type=int, default=200)
     parser.add_argument('--res-data', type=int, default=256)
     parser.add_argument('--res-crop', type=int, default=224)
@@ -46,26 +47,39 @@ def main():
     args = parser.parse_args()
     debug = args.debug
     root = Path('data/bop') / args.dataset
-    cfg = config[args.dataset]
+
+    if (args.neus2_dataset):
+        if (args.synth):
+            cfg_path = root / "cfg_synthetic.yml"
+        else:
+            cfg_path = root / "cfg_converted_train.yml"
+        cfg = DatasetConfig.from_yaml(yaml_file_path=cfg_path)
+        args.n_valid = 0
+    else:
+        cfg = config[args.dataset]
 
     # load objs
     objs, obj_ids = obj.load_objs(root / cfg.model_folder)
     assert len(obj_ids) > 0
 
     # model
-    if args.ckpt:
+    if (args.ckpt):
         assert args.dataset == Path(args.ckpt).name.split('-')[0]
         model = SurfaceEmbeddingModel.load_from_checkpoint(args.ckpt)
     else:
         model = SurfaceEmbeddingModel(n_objs=len(obj_ids), **vars(args))
 
     # datasets
-    auxs = model.get_auxs(objs, args.res_crop)
+    auxs = model.get_auxs(
+        objs,
+        args.res_crop,
+        generate_bg_fg=args.neus2_dataset,
+        probability_foreground_objects=1.0 if args.neus2_dataset else 0.0)
     data = utils.EmptyDataset()
-    if args.synth:
+    if (args.synth):
         data += instance.BopInstanceDataset(
             dataset_root=root,
-            pbr=True,
+            pbr=not args.neus2_dataset,
             test=False,
             cfg=cfg,
             obj_ids=obj_ids,
@@ -73,8 +87,9 @@ def main():
             min_visib_fract=args.min_visib_fract,
             scene_ids=[1] if debug else None,
         )
-    if args.real:
-        assert args.dataset in {'tless', 'tudl', 'ycbv'}
+    if (args.real):
+        if (not args.neus2_dataset):
+            assert args.dataset in {'tless', 'tudl', 'ycbv'}
         data_real = instance.BopInstanceDataset(
             dataset_root=root,
             pbr=False,
@@ -97,19 +112,21 @@ def main():
         generator=torch.Generator().manual_seed(0),
     )
 
-    loader_args = dict(
-        batch_size=args.batch_size,
-        num_workers=torch.get_num_threads()
-        if args.num_workers is None else args.num_workers,
-        persistent_workers=True,
-        shuffle=True,
-        worker_init_fn=worker_init_fn,
-        pin_memory=True,
-    )
+    loader_args = dict(batch_size=args.batch_size,
+                       num_workers=torch.get_num_threads()
+                       if args.num_workers is None else args.num_workers,
+                       persistent_workers=True,
+                       shuffle=True,
+                       worker_init_fn=worker_init_fn,
+                       pin_memory=True,
+                       multiprocessing_context='spawn')
     loader_train = torch.utils.data.DataLoader(data_train,
                                                drop_last=True,
                                                **loader_args)
-    loader_valid = torch.utils.data.DataLoader(data_valid, **loader_args)
+    if (n_valid > 0):
+        loader_valid = torch.utils.data.DataLoader(data_valid, **loader_args)
+    else:
+        loader_valid = None
 
     # train
     log_dir = Path('data/logs')

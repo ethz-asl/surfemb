@@ -1,8 +1,11 @@
+from pathlib import Path
 from typing import Set
 
 import cv2
 import numpy as np
+import torch
 
+from .bg_fg_auxs import RandomBackgroundForegroundCreator
 from .instance import BopInstanceDataset, BopInstanceAux
 from .tfms import normalize
 
@@ -131,6 +134,46 @@ class RandomRotatedMaskCropApply(BopInstanceAux):
             inst[f'{crop_key}_crop'] = cv2.warpAffine(im,
                                                       inst['M_crop'], (r, r),
                                                       flags=interp)
+        return inst
+
+
+class BackgroundForegroundGenerator(BopInstanceAux):
+
+    def __init__(self, crop_res: int, passthrough: bool,
+                 probability_foreground_objects: float, mask_type: str):
+        self._crop_res = crop_res
+        self._passthrough = passthrough
+        self._probability_foreground_objects = probability_foreground_objects
+        self._mask_type = mask_type
+        self._random_bg_fg_creator = None
+
+    def __call__(self, inst: dict, dataset: BopInstanceDataset) -> dict:
+        if (self._passthrough):
+            return inst['rgb']
+
+        if (self._random_bg_fg_creator is None):
+            self._random_bg_fg_creator = RandomBackgroundForegroundCreator(
+                H=self._crop_res,
+                W=self._crop_res,
+                augmentation_dataset_folder=Path("data/augmentation_datasets"),
+                probability_foreground_objects=(
+                    self._probability_foreground_objects))
+
+        # Add alpha channel to image, based on its mask.
+        rgba = np.concatenate([inst['rgb'], inst[self._mask_type][..., None]],
+                              axis=-1) / 255.
+
+        # Add foreground.
+        rgba = self._random_bg_fg_creator.transform_image_fg(
+            img=torch.from_numpy(rgba).to(device="cuda:0", dtype=torch.float32))
+
+        # Add background.
+        rgba = self._random_bg_fg_creator.transform_image_bg(img=rgba)
+
+        assert (rgba.shape == (self._crop_res, self._crop_res, 3))
+
+        inst['rgb'] = (rgba.cpu().numpy() * 255.).astype(np.uint8)
+
         return inst
 
 

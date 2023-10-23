@@ -76,11 +76,21 @@ class SurfaceEmbeddingModel(pl.LightningModule):
                             action='store_false')
         return parent_parser
 
-    def get_auxs(self, objs: Sequence[Obj], crop_res: int):
+    def get_auxs(self, objs: Sequence[Obj], crop_res: int, generate_bg_fg: bool,
+                 probability_foreground_objects: float):
+        assert (isinstance(probability_foreground_objects, float) and
+                0.0 <= probability_foreground_objects <= 1.0)
+        if (not generate_bg_fg):
+            assert (probability_foreground_objects == 0.0)
         random_crop_aux = data.std_auxs.RandomRotatedMaskCrop(crop_res)
         return (
             data.std_auxs.RgbLoader(),
             data.std_auxs.MaskLoader(),
+            data.std_auxs.BackgroundForegroundGenerator(
+                crop_res=crop_res,
+                passthrough=not generate_bg_fg,
+                probability_foreground_objects=probability_foreground_objects,
+                mask_type='mask_visib'),
             random_crop_aux.definition_aux,
             # Some image augmentations probably make most sense in the original
             # image, before rotation / rescaling by cropping. 'definition_aux'

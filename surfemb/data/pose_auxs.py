@@ -1,10 +1,11 @@
 from typing import Sequence
 
+import cv2
 import numpy as np
 
 from .instance import BopInstanceAux
 from .obj import Obj
-from .renderer import ObjCoordRenderer
+from .renderer import _RENDERERS
 
 
 class ObjCoordAux(BopInstanceAux):
@@ -12,6 +13,7 @@ class ObjCoordAux(BopInstanceAux):
     def __init__(self,
                  objs: Sequence[Obj],
                  res: int,
+                 renderer_type: str,
                  mask_key='mask_visib_crop',
                  replace_mask=False,
                  sigma=0.):
@@ -19,17 +21,24 @@ class ObjCoordAux(BopInstanceAux):
         self.mask_key = mask_key
         self.replace_mask = replace_mask
         self.renderer = None
+        if (not renderer_type in _RENDERERS):
+            raise ValueError(f"Invalid value '{renderer_type}' for "
+                             "`renderer_type`. Valid values are: "
+                             f"{sorted(_RENDERERS.keys())}.")
+        self._renderer_type = renderer_type
         self.sigma = sigma
 
     def get_renderer(self):
         # lazy instantiation of renderer to create the context in the worker
         # process
-        if self.renderer is None:
-            self.renderer = ObjCoordRenderer(self.objs, self.res)
+        if (self.renderer is None):
+            self.renderer = _RENDERERS[self._renderer_type](self.objs, self.res)
+
         return self.renderer
 
     def __call__(self, inst: dict, _) -> dict:
         renderer = self.get_renderer()
+
         K = inst['K_crop'].copy()
 
         if self.sigma > 0:
@@ -44,15 +53,37 @@ class ObjCoordAux(BopInstanceAux):
                     break
 
         obj_coord = renderer.render(inst['obj_idx'], K, inst['cam_R_obj'],
-                                    inst['cam_t_obj']).copy()
-        if self.mask_key is not None:
-            if self.replace_mask:
-                mask = obj_coord[..., 3]
-            else:
-                mask = obj_coord[..., 3] * inst[self.mask_key] / 255
-                obj_coord[..., 3] = mask
-            inst[self.mask_key] = (mask * 255).astype(np.uint8)
-        inst['obj_coord'] = obj_coord
+                                    inst['cam_t_obj'])
+
+        if (obj_coord is not None):
+            obj_coord = obj_coord.copy()
+            if (self.mask_key is not None):
+                if (self.replace_mask):
+                    mask = obj_coord[..., 3]
+                else:
+                    mask = obj_coord[..., 3] * inst[self.mask_key] / 255
+                    obj_coord[..., 3] = mask
+                inst[self.mask_key] = (mask * 255).astype(np.uint8)
+            inst['obj_coord'] = obj_coord
+        else:
+            # Offline NeuS2 renderer.
+            # - Rotate/translate the offline-rendered coordinate maps.
+            M_crop = inst['M_crop'].copy()
+            inst['obj_coord'] = cv2.warpAffine(
+                inst['offline_coord'],
+                M_crop,
+                inst['offline_coord'].shape[1::-1],
+                flags=cv2.INTER_NEAREST)
+            # - Normalize the coordinates.
+            is_coord_valid = np.any(inst['obj_coord'] != 0, axis=-1)
+            inst['obj_coord'][is_coord_valid] = inst['obj_coord'][
+                is_coord_valid] - self.objs[inst['obj_idx']].offset
+            inst['obj_coord'][is_coord_valid] = inst['obj_coord'][
+                is_coord_valid] / self.objs[inst['obj_idx']].scale
+            # - Add 'alpha' channel.
+            inst['obj_coord'] = np.concatenate(
+                [inst['obj_coord'], is_coord_valid[..., None]], axis=-1)
+
         return inst
 
 

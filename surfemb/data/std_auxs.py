@@ -7,6 +7,7 @@ import torch
 
 from .bg_fg_auxs import RandomBackgroundForegroundCreator
 from .instance import BopInstanceDataset, BopInstanceAux
+from .renderer import _RENDERERS
 from .tfms import normalize
 
 
@@ -22,6 +23,29 @@ class RgbLoader(BopInstanceAux):
         rgb = cv2.imread(str(fp), cv2.IMREAD_COLOR)[..., ::-1]
         assert rgb is not None
         inst['rgb'] = rgb.copy() if self.copy else rgb
+        return inst
+
+
+class CoordinateLoader(BopInstanceAux):
+
+    def __init__(self, renderer_type, copy=False):
+        if (not renderer_type in _RENDERERS):
+            raise ValueError(f"Invalid value '{renderer_type}' for "
+                             "`renderer_type`. Valid values are: "
+                             f"{sorted(_RENDERERS.keys())}.")
+        self._renderer_type = renderer_type
+        self.copy = copy
+
+    def __call__(self, inst: dict, dataset: BopInstanceDataset) -> dict:
+        if (self._renderer_type != "neus2_offline"):
+            return inst
+        # Load pre-computed, offline NeuS2 coordinates.
+        scene_id, img_id = inst['scene_id'], inst['img_id']
+        fp = dataset.data_folder / (
+            f'{scene_id:06d}/{dataset.coordinate_folder}/{img_id:06d}.'
+            f'{dataset.coordinate_ext}')
+        coord = np.load(fp)
+        inst['offline_coord'] = coord.copy() if self.copy else coord
         return inst
 
 

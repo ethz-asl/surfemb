@@ -7,9 +7,11 @@ class DatasetConfig:
     train_folder = 'train'
     test_folder = 'test'
     img_folder = 'rgb'
+    coordinate_folder = None
     depth_folder = 'depth'
     img_ext = 'png'
     depth_ext = 'png'
+    coordinate_ext = None
 
     @classmethod
     def from_yaml(cls, yaml_file_path: str):
@@ -20,7 +22,8 @@ class DatasetConfig:
 
         assert (sorted(cfg_yaml.keys()) == sorted([
             'model_folder', 'train_folder', 'test_folder', 'img_folder',
-            'depth_folder', 'img_ext', 'depth_ext'
+            'depth_folder', 'img_ext', 'depth_ext', 'coordinate_folder',
+            'coordinate_ext'
         ]))
         for key in cfg_yaml.keys():
             setattr(cfg, key, cfg_yaml[key])

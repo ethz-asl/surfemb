@@ -77,7 +77,7 @@ class SurfaceEmbeddingModel(pl.LightningModule):
         return parent_parser
 
     def get_auxs(self, objs: Sequence[Obj], crop_res: int, generate_bg_fg: bool,
-                 probability_foreground_objects: float):
+                 probability_foreground_objects: float, renderer_type: str):
         assert (isinstance(probability_foreground_objects, float) and
                 0.0 <= probability_foreground_objects <= 1.0)
         if (not generate_bg_fg):
@@ -85,6 +85,7 @@ class SurfaceEmbeddingModel(pl.LightningModule):
         random_crop_aux = data.std_auxs.RandomRotatedMaskCrop(crop_res)
         return (
             data.std_auxs.RgbLoader(),
+            data.std_auxs.CoordinateLoader(renderer_type=renderer_type),
             data.std_auxs.MaskLoader(),
             data.std_auxs.BackgroundForegroundGenerator(
                 crop_res=crop_res,
@@ -110,7 +111,10 @@ class SurfaceEmbeddingModel(pl.LightningModule):
                     A.GaussianBlur(blur_limit=(1, 3)),
                 ])),
             random_crop_aux.apply_aux,
-            data.pose_auxs.ObjCoordAux(objs, crop_res, replace_mask=True),
+            data.pose_auxs.ObjCoordAux(objs,
+                                       crop_res,
+                                       renderer_type=renderer_type,
+                                       replace_mask=True),
             data.pose_auxs.SurfaceSampleAux(objs, self.n_neg),
             data.pose_auxs.MaskSamplesAux(self.n_pos),
             data.std_auxs.TransformsAux(tfms=A.Compose([
@@ -141,7 +145,12 @@ class SurfaceEmbeddingModel(pl.LightningModule):
             ))
         if not from_detections:
             auxs += [
-                data.pose_auxs.ObjCoordAux(objs, crop_res, replace_mask=True),
+                # NOTE: Currently at test time, only the standard moderngl-based
+                # renderer that uses the mesh model is supported.
+                data.pose_auxs.ObjCoordAux(objs,
+                                           crop_res,
+                                           renderer_type="moderngl",
+                                           replace_mask=True),
                 data.pose_auxs.SurfaceSampleAux(objs, self.n_neg),
                 data.pose_auxs.MaskSamplesAux(self.n_pos),
             ]

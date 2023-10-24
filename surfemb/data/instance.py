@@ -43,6 +43,8 @@ class BopInstanceDataset(torch.utils.data.Dataset):
             self.depth_folder = cfg.depth_folder
             self.img_ext = cfg.img_ext
             self.depth_ext = cfg.depth_ext
+        self.coordinate_ext = cfg.coordinate_ext
+        self.coordinate_folder = cfg.coordinate_folder
 
         self.auxs = auxs
         obj_idxs = {obj_id: idx for idx, obj_id in enumerate(obj_ids)}

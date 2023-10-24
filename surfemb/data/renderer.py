@@ -36,6 +36,17 @@ def projection_matrix(K, w, h, near=10., far=10000.):  # 1 cm to 10 m
     return orth @ persp @ view
 
 
+class Neus2OfflineRenderer:
+
+    def __init__(self, *args, **kwargs):
+        # NOOP.
+        pass
+
+    def render(self, *args, **kwargs):
+        # NOOP.
+        return None
+
+
 class ObjCoordRenderer:
 
     def __init__(self,
@@ -130,3 +141,9 @@ class ObjCoordRenderer:
     def denormalize(self, model_coords: np.ndarray, obj_idx: int):
         return model_coords * self.objs[obj_idx].scale + self.objs[
             obj_idx].offset
+
+
+_RENDERERS = {
+    "moderngl": ObjCoordRenderer,
+    "neus2_offline": Neus2OfflineRenderer
+}

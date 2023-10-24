@@ -42,6 +42,7 @@ def main():
     parser.add_argument('--ckpt', default=None)
     parser.add_argument('--no-synth', dest='synth', action='store_false')
     parser.add_argument('--real', action='store_true')
+    parser.add_argument('--renderer-type', type=str, required=True)
 
     parser = SurfaceEmbeddingModel.model_specific_args(parser)
     args = parser.parse_args()
@@ -74,7 +75,8 @@ def main():
         objs,
         args.res_crop,
         generate_bg_fg=args.neus2_dataset,
-        probability_foreground_objects=1.0 if args.neus2_dataset else 0.0)
+        probability_foreground_objects=1.0 if args.neus2_dataset else 0.0,
+        renderer_type=args.renderer_type)
     data = utils.EmptyDataset()
     if (args.synth):
         data += instance.BopInstanceDataset(

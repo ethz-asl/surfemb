@@ -61,6 +61,28 @@ class NeuS2OnlineRenderer:
                 checkpoint_folder=checkpoint_folder)
 
     def render(self, obj_idx, K, R, t, M_crop=None):
+        # By default, render coordinates.
+        return self._render(obj_idx=obj_idx,
+                            K=K,
+                            R=R,
+                            t=t,
+                            render_mode="coordinate",
+                            M_crop=M_crop)
+
+    def render_depth(self, obj_idx, K, R, t, M_crop=None):
+        depth_image = self._render(obj_idx=obj_idx,
+                                   K=K,
+                                   R=R,
+                                   t=t,
+                                   render_mode="depth",
+                                   M_crop=M_crop)
+
+        # Threshold alpha channel based on density.
+        depth_image[depth_image[..., 3] <= 0.8] = 0.
+
+        return depth_image[..., 0]
+
+    def _render(self, obj_idx, K, R, t, render_mode, M_crop=None):
         if (not (K[0, 1] == K[1, 0] == K[2, 0] == K[2, 1] == 0. and
                  K[2, 2] == 1.)):
             raise NotImplementedError(
@@ -86,10 +108,11 @@ class NeuS2OnlineRenderer:
             W_nerf_T_C=scene_T_C,
             H=self._H,
             W=self._W,
-            render_mode="coordinate",
-            # Consider a discontinuity of 0.01 in the NeuS scale to filter the
-            # coordinates.
-            threshold_coordinates_filtering=0.01)
+            render_mode=render_mode,
+            # Consider a discontinuity of 0.01 in the NeuS scale when rendering
+            # coordinates, to filter them.
+            threshold_coordinates_filtering=0.01
+            if render_mode == "coordinate" else None)
 
         # Threshold alpha channel based on density.
         output[..., 3] = output[..., 3] > 0.8

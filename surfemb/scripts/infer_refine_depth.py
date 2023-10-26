@@ -124,8 +124,7 @@ for j in range(2):
                                                     t,
                                                     read_depth=True)
             else:
-                raise NotImplementedError("Depth rendering with NeuS2-based "
-                                          "renderer was not yet implemented.")
+                depth_render = crop_renderer.render_depth(obj_idx, K_crop, R, t)
             render_mask = depth_render > 0
 
             query_img_norm = torch.norm(query_img,
@@ -183,8 +182,8 @@ for j in range(2):
                                                          t_depth_refined,
                                                          read_depth=True) > 0
             else:
-                raise NotImplementedError("Depth rendering with NeuS2-based "
-                                          "renderer was not yet implemented.")
+                render_mask_after = crop_renderer.render_depth(
+                    obj_idx, K_crop, R, t_depth_refined) > 0
             axs[2, 1].imshow(d['rgb_crop'])
             axs[2, 1].imshow(render_mask_after, alpha=0.5)
             axs[2, 1].set_title('pose after depth refine')

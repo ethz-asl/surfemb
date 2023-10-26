@@ -89,6 +89,10 @@ class NeuS2OnlineRenderer:
             # Consider a discontinuity of 0.01 in the NeuS scale to filter the
             # coordinates.
             threshold_coordinates_filtering=0.01)
+
+        # Threshold alpha channel based on density.
+        output[..., 3] = output[..., 3] > 0.8
+
         if (M_crop is not None):
             # Apply affine transformation.
             return cv2.warpAffine(output,

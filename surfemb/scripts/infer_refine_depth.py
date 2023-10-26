@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from ..utils import add_timing_to_list
 from ..data.config import config
 from ..data.obj import load_objs
-from ..data.renderer import ObjCoordRenderer
+from ..data.renderer import _INFER_RENDERERS
 from ..data.detector_crops import DetectorCropDataset
 from ..surface_embedding import SurfaceEmbeddingModel
 
@@ -30,12 +30,24 @@ parser = argparse.ArgumentParser()
 parser.add_argument('model_path')
 parser.add_argument('--device', required=True)
 parser.add_argument('--debug', action='store_true')
+parser.add_argument('--renderer-type', type=str, required=True)
+parser.add_argument('--neus2-checkpoint-folders', nargs='+')
 
 args = parser.parse_args()
 model_path = Path(args.model_path)
 name = model_path.name.split('.')[0]
 dataset = name.split('-')[0]
 device = torch.device(args.device)
+renderer_type = args.renderer_type
+neus2_checkpoint_folders = args.neus2_checkpoint_folders
+
+if (not renderer_type in _INFER_RENDERERS):
+    raise ValueError(f"Invalid value '{renderer_type}' for `renderer_type`. "
+                     f"Valid values are: {sorted(_INFER_RENDERERS.keys())}.")
+
+kwargs_renderer = {}
+if (renderer_type == "neus2_online"):
+    kwargs_renderer["checkpoint_folders"] = args.neus2_checkpoint_folders
 
 cfg = config[dataset]
 crop_res = 224
@@ -64,7 +76,10 @@ dataset = DetectorCropDataset(
     auxs=model.get_infer_auxs(objs=objs, crop_res=crop_res))
 assert poses.shape[1] == len(dataset)
 
-crop_renderer = ObjCoordRenderer(objs=objs, w=crop_res, h=crop_res)
+crop_renderer = _INFER_RENDERERS[renderer_type](objs=objs,
+                                                w=crop_res,
+                                                h=crop_res,
+                                                **kwargs_renderer)
 n_failed = 0
 all_depth_timings = [[], []]
 for j in range(2):
@@ -102,11 +117,15 @@ for j in range(2):
             depth_sensor_crop = cv2.warpAffine(depth_sensor,
                                                M, (crop_res, crop_res),
                                                flags=cv2.INTER_LINEAR)
-            depth_render = crop_renderer.render(obj_idx,
-                                                K_crop,
-                                                R,
-                                                t,
-                                                read_depth=True)
+            if (renderer_type == "moderngl"):
+                depth_render = crop_renderer.render(obj_idx,
+                                                    K_crop,
+                                                    R,
+                                                    t,
+                                                    read_depth=True)
+            else:
+                raise NotImplementedError("Depth rendering with NeuS2-based "
+                                          "renderer was not yet implemented.")
             render_mask = depth_render > 0
 
             query_img_norm = torch.norm(query_img,
@@ -157,8 +176,15 @@ for j in range(2):
             axs[2, 0].imshow(d['rgb_crop'])
             axs[2, 0].imshow(render_mask, alpha=0.5)
             axs[2, 0].set_title('initial pose')
-            render_mask_after = crop_renderer.render(
-                obj_idx, K_crop, R, t_depth_refined, read_depth=True) > 0
+            if (renderer_type == "moderngl"):
+                render_mask_after = crop_renderer.render(obj_idx,
+                                                         K_crop,
+                                                         R,
+                                                         t_depth_refined,
+                                                         read_depth=True) > 0
+            else:
+                raise NotImplementedError("Depth rendering with NeuS2-based "
+                                          "renderer was not yet implemented.")
             axs[2, 1].imshow(d['rgb_crop'])
             axs[2, 1].imshow(render_mask_after, alpha=0.5)
             axs[2, 1].set_title('pose after depth refine')

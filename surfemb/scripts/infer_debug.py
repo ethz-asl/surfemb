@@ -10,7 +10,7 @@ from ..data import obj
 from ..data.config import config
 from ..data import instance
 from ..data import detector_crops
-from ..data.renderer import ObjCoordRenderer
+from ..data.renderer import _INFER_RENDERERS
 from ..surface_embedding import SurfaceEmbeddingModel
 from .. import pose_est
 from .. import pose_refine
@@ -27,11 +27,23 @@ parser.add_argument(
     required=True,
     help=("Whether to use criterion based on normals to filter out pose "
           "hypotheses."))
+parser.add_argument('--renderer-type', type=str, required=True)
+parser.add_argument('--neus2-checkpoint-folders', nargs='+')
 
 args = parser.parse_args()
 data_i = args.i
 device = torch.device(args.device)
 model_path = Path(args.model_path)
+renderer_type = args.renderer_type
+neus2_checkpoint_folders = args.neus2_checkpoint_folders
+
+if (not renderer_type in _INFER_RENDERERS):
+    raise ValueError(f"Invalid value '{renderer_type}' for `renderer_type`. "
+                     f"Valid values are: {sorted(_INFER_RENDERERS.keys())}.")
+
+kwargs_renderer = {}
+if (renderer_type == "neus2_online"):
+    kwargs_renderer["checkpoint_folders"] = args.neus2_checkpoint_folders
 
 model = SurfaceEmbeddingModel.load_from_checkpoint(args.model_path)
 model.eval()
@@ -46,7 +58,9 @@ cfg = config[dataset]
 res_crop = 224
 
 objs, obj_ids = obj.load_objs(root / cfg.model_folder)
-renderer = ObjCoordRenderer(objs, res_crop)
+renderer = _INFER_RENDERERS[renderer_type](objs=objs,
+                                           w=res_crop,
+                                           **kwargs_renderer)
 assert len(obj_ids) == model.n_objs
 surface_samples, surface_sample_normals = utils.load_surface_samples(
     dataset, obj_ids)

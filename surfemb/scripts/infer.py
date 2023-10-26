@@ -9,7 +9,7 @@ from .. import utils
 from ..data import detector_crops
 from ..data.config import config
 from ..data.obj import load_objs
-from ..data.renderer import ObjCoordRenderer
+from ..data.renderer import _INFER_RENDERERS
 from ..surface_embedding import SurfaceEmbeddingModel
 from ..pose_est import estimate_pose
 from ..pose_refine import refine_pose
@@ -25,6 +25,8 @@ parser.add_argument(
     required=True,
     help=("Whether to use criterion based on normals to filter out pose "
           "hypotheses."))
+parser.add_argument('--renderer-type', type=str, required=True)
+parser.add_argument('--neus2-checkpoint-folders', nargs='+')
 # Unused.
 # parser.add_argument('--max-poses', type=int, default=10000)
 # parser.add_argument('--max-pose-evaluations', type=int, default=1000)
@@ -39,6 +41,16 @@ model_path = Path(args.model_path)
 assert model_path.is_file()
 model_name = model_path.name.split('.')[0]
 dataset = model_name.split('-')[0]
+renderer_type = args.renderer_type
+neus2_checkpoint_folders = args.neus2_checkpoint_folders
+
+if (not renderer_type in _INFER_RENDERERS):
+    raise ValueError(f"Invalid value '{renderer_type}' for `renderer_type`. "
+                     f"Valid values are: {sorted(_INFER_RENDERERS.keys())}.")
+
+kwargs_renderer = {}
+if (renderer_type == "neus2_online"):
+    kwargs_renderer["checkpoint_folders"] = args.neus2_checkpoint_folders
 
 results_dir = Path('data/results')
 results_dir.mkdir(exist_ok=True)
@@ -68,7 +80,10 @@ data = detector_crops.DetectorCropDataset(
     auxs=model.get_infer_auxs(objs=objs,
                               crop_res=res_crop,
                               from_detections=True))
-renderer = ObjCoordRenderer(objs, w=res_crop, h=res_crop)
+renderer = _INFER_RENDERERS[renderer_type](objs=objs,
+                                           w=res_crop,
+                                           h=res_crop,
+                                           **kwargs_renderer)
 
 # infer
 all_poses = np.empty((2, len(data), 3, 4))

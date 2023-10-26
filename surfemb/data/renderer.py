@@ -1,5 +1,6 @@
 from typing import Sequence
 
+import copy
 import cv2
 import numpy as np
 import moderngl
@@ -210,8 +211,11 @@ class ObjCoordRenderer:
             obj_idx].offset
 
 
-_RENDERERS = {
+_INFER_RENDERERS = {
     "moderngl": ObjCoordRenderer,
-    "neus2_offline": NeuS2OfflineRenderer,
     "neus2_online": NeuS2OnlineRenderer
+}
+_RENDERERS = {
+    **copy.deepcopy(_INFER_RENDERERS),
+    "neus2_offline": NeuS2OfflineRenderer,
 }

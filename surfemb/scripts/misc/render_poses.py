@@ -6,7 +6,7 @@ from collections import defaultdict
 import cv2
 import numpy as np
 
-from ...data.renderer import ObjCoordRenderer
+from ...data.renderer import _INFER_RENDERERS
 from ...data.obj import load_objs
 from ...data.config import config
 
@@ -19,6 +19,8 @@ parser.add_argument('--no-refine', action='store_true')
 parser.add_argument('--no-bbox', action='store_true')
 parser.add_argument('--render-all', action='store_true')
 parser.add_argument('--alpha', type=float, default=0.7)
+parser.add_argument('--renderer-type', type=str, required=True)
+parser.add_argument('--neus2-checkpoint-folders', nargs='+')
 
 args = parser.parse_args()
 
@@ -31,6 +33,16 @@ pose_scores_fp = poses_fp.parent / (
 poses = np.load(str(poses_fp))[0 if args.no_refine else 1]
 pose_scores = np.load(str(pose_scores_fp))
 show_bbox = not args.no_bbox
+renderer_type = args.renderer_type
+neus2_checkpoint_folders = args.neus2_checkpoint_folders
+
+if (not renderer_type in _INFER_RENDERERS):
+    raise ValueError(f"Invalid value '{renderer_type}' for `renderer_type`. "
+                     f"Valid values are: {sorted(_INFER_RENDERERS.keys())}.")
+
+kwargs_renderer = {}
+if (renderer_type == "neus2_online"):
+    kwargs_renderer["checkpoint_folders"] = args.neus2_checkpoint_folders
 
 z = poses[:, 2, 3]
 
@@ -73,8 +85,15 @@ for scene_id, scene in list(inst_count.items())[start_idx:]:
         img_ = img.copy()
         h, w = img.shape[:2]
 
-        renderer = ObjCoordRenderer(objs, w=w, h=h)
-        renderer.ctx.clear()
+        renderer = _INFER_RENDERERS[renderer_type](objs=objs,
+                                                   w=w,
+                                                   h=h,
+                                                   **kwargs_renderer)
+        rendering_buffer = None
+        if (renderer_type == "moderngl"):
+            renderer.ctx.clear()
+        else:
+            rendering_buffer = np.zeros([h, w, 4])
         for obj_id, count in view.items():
             obj_idx = obj_ids.index(obj_id)
             mask = (scene_ids == scene_id) & (view_ids == view_id) & (
@@ -99,14 +118,39 @@ for scene_id, scene in list(inst_count.items())[start_idx:]:
                     if np.allclose(t[:, 0], (0, 0, 0)):
                         print('no pose found')
                     else:
-                        renderer.render(obj_idx=obj_idx,
-                                        K=K,
-                                        R=R,
-                                        t=t,
-                                        clear=False,
-                                        read=False)
+                        if (renderer_type == "moderngl"):
+                            renderer.render(obj_idx=obj_idx,
+                                            K=K,
+                                            R=R,
+                                            t=t,
+                                            clear=False,
+                                            read=False)
+                        else:
+                            curr_coords = renderer.render(obj_idx=obj_idx,
+                                                          K=K,
+                                                          R=R,
+                                                          t=t)
+                            fg_mask = (curr_coords[..., 3]
+                                       != 0).astype(np.uint8)
+                            bg_mask = (curr_coords[...,
+                                                   3] == 0).astype(np.uint8)
+                            # Overlay the current coordinate image to the
+                            # previous renderings. Cf. https://docs.opencv.org/
+                            # 3.4/d0/d86/tutorial_py_image_arithmetics.html.
+                            rendering_buffer = cv2.bitwise_and(rendering_buffer,
+                                                               rendering_buffer,
+                                                               mask=bg_mask)
+                            curr_coords = cv2.bitwise_and(curr_coords,
+                                                          curr_coords,
+                                                          mask=fg_mask)
+                            # Update the rendering buffer.
+                            rendering_buffer = cv2.add(rendering_buffer,
+                                                       curr_coords)
 
-        render = renderer.read().copy()
+        if (renderer_type == "moderngl"):
+            render = renderer.read().copy()
+        else:
+            render = rendering_buffer
         mask = render[..., 3] != 0
         render = render[..., :3] * 0.5 + 0.5
         render_vis = np.tile(

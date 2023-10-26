@@ -1,9 +1,13 @@
 from typing import Sequence
 
+import cv2
 import numpy as np
 import moderngl
 
 from .obj import Obj
+
+from neusurfemb.misc_utils.transforms import _W_NEUS_T_W_BOP, _W_NEUS_T_SCENE
+from neusurfemb.neus.network import NeuSNetwork
 
 
 def orthographic_matrix(left, right, bottom, top, near, far):
@@ -36,7 +40,66 @@ def projection_matrix(K, w, h, near=10., far=10000.):  # 1 cm to 10 m
     return orth @ persp @ view
 
 
-class Neus2OfflineRenderer:
+class NeuS2OnlineRenderer:
+
+    def __init__(self, checkpoint_folders, w, *args, h=None, **kwargs):
+        assert (checkpoint_folders is not None and
+                isinstance(checkpoint_folders, list) and
+                len(checkpoint_folders) > 0)
+        self._W = w
+        if (h is None):
+            h = w
+        self._H = h
+
+        # Load NeuS2 network(s).
+        self._models = [NeuSNetwork() for _ in checkpoint_folders]
+
+        # Load pre-trained checkpoint.
+        for obj_idx, checkpoint_folder in enumerate(checkpoint_folders):
+            self._models[obj_idx].load_checkpoint_from_folder(
+                checkpoint_folder=checkpoint_folder)
+
+    def render(self, obj_idx, K, R, t, M_crop=None):
+        if (not (K[0, 1] == K[1, 0] == K[2, 0] == K[2, 1] == 0. and
+                 K[2, 2] == 1.)):
+            raise NotImplementedError(
+                "Rendering with a non-pinhole camera is currently not "
+                "supported with NeuS2-based renderer. Please use the original "
+                "K matrix and the `M_crop` argument instead.")
+
+        C_T_W_bop = np.concatenate((
+            np.concatenate((R, t), axis=1),
+            [[0, 0, 0, 1]],
+        ))
+        # Undo the transformations in
+        # `neusurfemb/dataset_scripts/bop_dataset_to_neus.py`.
+        W_bop_T_C = np.linalg.inv(C_T_W_bop.copy())
+        W_bop_T_C[0:3, 2] *= -1
+        W_bop_T_C[0:3, 1] *= -1
+        _W_bop_T_scene = np.linalg.inv(_W_NEUS_T_W_BOP) @ _W_NEUS_T_SCENE
+        scene_T_C = np.linalg.inv(_W_bop_T_scene) @ W_bop_T_C
+        scene_T_C[:3, 3] = scene_T_C[:3, 3] * 1.e-3
+
+        output = self._models[obj_idx].render_from_given_pose(
+            K=K,
+            W_nerf_T_C=scene_T_C,
+            H=self._H,
+            W=self._W,
+            render_mode="coordinate",
+            # Consider a discontinuity of 0.01 in the NeuS scale to filter the
+            # coordinates.
+            threshold_coordinates_filtering=0.01)
+        if (M_crop is not None):
+            # Apply affine transformation.
+            return cv2.warpAffine(output,
+                                  M_crop,
+                                  output.shape[1::-1],
+                                  flags=cv2.INTER_NEAREST)
+        else:
+            return output
+
+
+class NeuS2OfflineRenderer:
 
     def __init__(self, *args, **kwargs):
         # NOOP.
@@ -145,5 +208,6 @@ class ObjCoordRenderer:
 
 _RENDERERS = {
     "moderngl": ObjCoordRenderer,
-    "neus2_offline": Neus2OfflineRenderer
+    "neus2_offline": NeuS2OfflineRenderer,
+    "neus2_online": NeuS2OnlineRenderer
 }

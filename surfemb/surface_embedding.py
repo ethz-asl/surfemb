@@ -1,5 +1,5 @@
 import argparse
-from typing import Sequence, Union
+from typing import Optional, Sequence, Union
 
 import torch
 from torch.nn import functional as F
@@ -77,7 +77,8 @@ class SurfaceEmbeddingModel(pl.LightningModule):
         return parent_parser
 
     def get_auxs(self, objs: Sequence[Obj], crop_res: int, generate_bg_fg: bool,
-                 probability_foreground_objects: float, renderer_type: str):
+                 probability_foreground_objects: float, renderer_type: str,
+                 neus2_checkpoint_folders: Optional[Sequence[str]]):
         assert (isinstance(probability_foreground_objects, float) and
                 0.0 <= probability_foreground_objects <= 1.0)
         if (not generate_bg_fg):
@@ -111,10 +112,12 @@ class SurfaceEmbeddingModel(pl.LightningModule):
                     A.GaussianBlur(blur_limit=(1, 3)),
                 ])),
             random_crop_aux.apply_aux,
-            data.pose_auxs.ObjCoordAux(objs,
-                                       crop_res,
-                                       renderer_type=renderer_type,
-                                       replace_mask=True),
+            data.pose_auxs.ObjCoordAux(
+                objs,
+                crop_res,
+                renderer_type=renderer_type,
+                neus2_checkpoint_folders=neus2_checkpoint_folders,
+                replace_mask=True),
             data.pose_auxs.SurfaceSampleAux(objs, self.n_neg),
             data.pose_auxs.MaskSamplesAux(self.n_pos),
             data.std_auxs.TransformsAux(tfms=A.Compose([

@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Optional, Sequence
 
 import cv2
 import numpy as np
@@ -14,6 +14,7 @@ class ObjCoordAux(BopInstanceAux):
                  objs: Sequence[Obj],
                  res: int,
                  renderer_type: str,
+                 neus2_checkpoint_folders: Optional[Sequence[str]] = None,
                  mask_key='mask_visib_crop',
                  replace_mask=False,
                  sigma=0.):
@@ -26,20 +27,29 @@ class ObjCoordAux(BopInstanceAux):
                              "`renderer_type`. Valid values are: "
                              f"{sorted(_RENDERERS.keys())}.")
         self._renderer_type = renderer_type
+        self._neus2_checkpoint_folders = neus2_checkpoint_folders
         self.sigma = sigma
 
     def get_renderer(self):
         # lazy instantiation of renderer to create the context in the worker
         # process
         if (self.renderer is None):
-            self.renderer = _RENDERERS[self._renderer_type](self.objs, self.res)
+            kwargs = {}
+            if (self._renderer_type == "neus2_online"):
+                kwargs["checkpoint_folders"] = self._neus2_checkpoint_folders
+            self.renderer = _RENDERERS[self._renderer_type](objs=self.objs,
+                                                            w=self.res,
+                                                            **kwargs)
 
         return self.renderer
 
     def __call__(self, inst: dict, _) -> dict:
         renderer = self.get_renderer()
 
-        K = inst['K_crop'].copy()
+        if (self._renderer_type == "neus2_online"):
+            K = inst['K'].copy()
+        else:
+            K = inst['K_crop'].copy()
 
         if self.sigma > 0:
             # offset principal axis slightly to encourage all object
@@ -52,8 +62,17 @@ class ObjCoordAux(BopInstanceAux):
                     K[:2, 2] += offset * self.sigma
                     break
 
-        obj_coord = renderer.render(inst['obj_idx'], K, inst['cam_R_obj'],
-                                    inst['cam_t_obj'])
+        if (self._renderer_type == "neus2_online"):
+            obj_coord = renderer.render(obj_idx=inst['obj_idx'],
+                                        K=K,
+                                        R=inst['cam_R_obj'],
+                                        t=inst['cam_t_obj'],
+                                        M_crop=inst['M_crop'])
+        else:
+            obj_coord = renderer.render(obj_idx=inst['obj_idx'],
+                                        K=K,
+                                        R=inst['cam_R_obj'],
+                                        t=inst['cam_t_obj'])
 
         if (obj_coord is not None):
             obj_coord = obj_coord.copy()

@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import os
 
 import torch.utils.data
 import pytorch_lightning as pl
@@ -144,6 +145,8 @@ def main():
     model_ckpt_cb = pl.callbacks.ModelCheckpoint(dirpath='data/models/',
                                                  save_top_k=0,
                                                  save_last=True)
+    with open(os.path.join("data/models/", run.id), "w") as f:
+        f.write(str(vars(args)) + "\n")
     model_ckpt_cb.CHECKPOINT_NAME_LAST = f'{args.dataset}-{run.id}'
     trainer = pl.Trainer(
         resume_from_checkpoint=args.ckpt,

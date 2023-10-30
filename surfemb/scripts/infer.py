@@ -33,6 +33,15 @@ parser.add_argument('--neus2-checkpoint-folders', nargs='+')
 parser.add_argument('--no-rotation-ensemble',
                     dest='rotation_ensemble',
                     action='store_false')
+parser.add_argument('--dataset',
+                    help="Dataset containing the images on which to evaluate.",
+                    required=True)
+parser.add_argument(
+    '--surface-samples-dataset',
+    help=("Dataset from which to extract the surface samples. This can be "
+          "useful when using the objects reconstructed by NeuS2 instead of the "
+          "CAD models."),
+    required=True)
 
 args = parser.parse_args()
 res_crop = args.res_crop
@@ -40,7 +49,7 @@ device = torch.device(args.device)
 model_path = Path(args.model_path)
 assert model_path.is_file()
 model_name = model_path.name.rsplit('.', maxsplit=1)[0]
-dataset = model_name.split('-')[0]
+dataset = args.dataset
 renderer_type = args.renderer_type
 neus2_checkpoint_folders = args.neus2_checkpoint_folders
 
@@ -66,14 +75,14 @@ model = SurfaceEmbeddingModel.load_from_checkpoint(str(model_path)).eval().to(
 model.freeze()
 
 # load data
-root = Path('data/bop') / dataset
 cfg = config[dataset]
-objs, obj_ids = load_objs(root / cfg.model_folder)
+objs, obj_ids = load_objs(
+    Path('data/bop') / args.surface_samples_dataset / cfg.model_folder)
 assert len(obj_ids) > 0
 surface_samples, surface_sample_normals = utils.load_surface_samples(
-    dataset, obj_ids)
+    args.surface_samples_dataset, obj_ids)
 data = detector_crops.DetectorCropDataset(
-    dataset_root=root,
+    dataset_root=Path('data/bop') / dataset,
     cfg=cfg,
     obj_ids=obj_ids,
     detection_folder=Path(f'data/detection_results/{dataset}'),

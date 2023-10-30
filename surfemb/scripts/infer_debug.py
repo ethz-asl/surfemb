@@ -29,6 +29,15 @@ parser.add_argument(
           "hypotheses."))
 parser.add_argument('--renderer-type', type=str, required=True)
 parser.add_argument('--neus2-checkpoint-folders', nargs='+')
+parser.add_argument('--dataset',
+                    help="Dataset containing the images on which to evaluate.",
+                    required=True)
+parser.add_argument(
+    '--surface-samples-dataset',
+    help=("Dataset from which to extract the surface samples. This can be "
+          "useful when using the objects reconstructed by NeuS2 instead of the "
+          "CAD models."),
+    required=True)
 
 args = parser.parse_args()
 data_i = args.i
@@ -50,24 +59,27 @@ model.eval()
 model.freeze()
 model.to(device)
 
-dataset = model_path.name.split('-')[0]
+dataset = args.dataset
 real = args.real
 detection = args.detection
-root = Path('data/bop') / dataset
 cfg = config[dataset]
 res_crop = 224
 
-objs, obj_ids = obj.load_objs(root / cfg.model_folder)
+objs, obj_ids = obj.load_objs(
+    Path('data/bop') / args.surface_samples_dataset / cfg.model_folder)
 renderer = _INFER_RENDERERS[renderer_type](objs=objs,
                                            w=res_crop,
                                            **kwargs_renderer)
-assert len(obj_ids) == model.n_objs
+# assert len(obj_ids) == model.n_objs
 surface_samples, surface_sample_normals = utils.load_surface_samples(
-    dataset, obj_ids)
+    args.surface_samples_dataset, obj_ids)
 auxs = model.get_infer_auxs(objs=objs,
                             crop_res=res_crop,
                             from_detections=detection)
-dataset_args = dict(dataset_root=root, obj_ids=obj_ids, auxs=auxs, cfg=cfg)
+dataset_args = dict(dataset_root=Path('data/bop') / dataset,
+                    obj_ids=obj_ids,
+                    auxs=auxs,
+                    cfg=cfg)
 if detection:
     assert args.real
     data = detector_crops.DetectorCropDataset(

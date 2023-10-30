@@ -60,20 +60,22 @@ class DetectorCropDataset(torch.utils.data.Dataset):
     def __getitem__(self, i):
         scene_id, view_id, obj_id = self.scene_ids[i], self.view_ids[
             i], self.obj_ids[i]
-        instance = dict(
-            scene_id=scene_id,
-            img_id=view_id,
-            obj_id=obj_id,
-            obj_idx=self.obj_idxs[obj_id],
-            K=np.array(
-                self.scene_cameras[scene_id][str(view_id)]['cam_K']).reshape(
-                    (3, 3)),
-            mask_visib=self.bboxes[i],
-            bbox=self.bboxes[i].round().astype(int),
-        )
-        for aux in self.auxs:
-            instance = aux(instance, self)
-        return instance
+        if (obj_id in self.obj_idxs):
+            instance = dict(
+                scene_id=scene_id,
+                img_id=view_id,
+                obj_id=obj_id,
+                obj_idx=self.obj_idxs[obj_id],
+                K=np.array(self.scene_cameras[scene_id][str(view_id)]
+                           ['cam_K']).reshape((3, 3)),
+                mask_visib=self.bboxes[i],
+                bbox=self.bboxes[i].round().astype(int),
+            )
+            for aux in self.auxs:
+                instance = aux(instance, self)
+            return instance
+        else:
+            return None
 
 
 def _main():

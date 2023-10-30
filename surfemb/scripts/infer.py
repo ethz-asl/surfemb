@@ -160,7 +160,8 @@ def infer(i, d):
 
 
 for i, d in enumerate(tqdm(data, desc='running pose est.', smoothing=0)):
-    infer(i, d)
+    if (d is not None):
+        infer(i, d)
 
 time_forward = np.array(time_forward)
 time_pnpransac = np.array(time_pnpransac)

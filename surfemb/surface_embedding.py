@@ -86,7 +86,8 @@ class SurfaceEmbeddingModel(pl.LightningModule):
         random_crop_aux = data.std_auxs.RandomRotatedMaskCrop(crop_res)
         return (
             data.std_auxs.RgbLoader(),
-            data.std_auxs.CoordinateLoader(renderer_type=renderer_type),
+            data.std_auxs.CoordinateLoader(renderer_type=renderer_type,
+                                           objs=objs),
             data.std_auxs.MaskLoader(),
             data.std_auxs.BackgroundForegroundGenerator(
                 crop_res=crop_res,

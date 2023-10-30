@@ -28,13 +28,14 @@ class RgbLoader(BopInstanceAux):
 
 class CoordinateLoader(BopInstanceAux):
 
-    def __init__(self, renderer_type, copy=False):
+    def __init__(self, renderer_type, objs, copy=False):
         if (not renderer_type in _RENDERERS):
             raise ValueError(f"Invalid value '{renderer_type}' for "
                              "`renderer_type`. Valid values are: "
                              f"{sorted(_RENDERERS.keys())}.")
         self._renderer_type = renderer_type
         self.copy = copy
+        self._objs = objs
 
     def __call__(self, inst: dict, dataset: BopInstanceDataset) -> dict:
         if (self._renderer_type != "neus2_offline"):
@@ -45,6 +46,9 @@ class CoordinateLoader(BopInstanceAux):
             f'{scene_id:06d}/{dataset.coordinate_folder}/{img_id:06d}.'
             f'{dataset.coordinate_ext}')
         coord = np.load(fp)
+        # Transform the coordinates from mm to the training scale.
+        coord = (coord - self._objs[inst['obj_idx']].offset
+                ) / self._objs[inst['obj_idx']].scale
         inst['offline_coord'] = coord.copy() if self.copy else coord
         return inst
 

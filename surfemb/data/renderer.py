@@ -43,10 +43,12 @@ def projection_matrix(K, w, h, near=10., far=10000.):  # 1 cm to 10 m
 
 class NeuS2OnlineRenderer:
 
-    def __init__(self, checkpoint_folders, w, *args, h=None, **kwargs):
+    def __init__(self, checkpoint_folders, objs, w, *args, h=None, **kwargs):
         assert (checkpoint_folders is not None and
                 isinstance(checkpoint_folders, list) and
                 len(checkpoint_folders) > 0)
+        self.objs = objs
+
         self._W = w
         if (h is None):
             h = w
@@ -116,6 +118,20 @@ class NeuS2OnlineRenderer:
 
         # Threshold alpha channel based on density.
         output[..., 3] = output[..., 3] > 0.8
+
+        # Transform the coordinate image to the training scale and to the BOP
+        # coordinate frame.
+        one_uom_scene_to_m = 1. / self._models[
+            obj_idx].neus.nerf.training.dataset.scale
+        is_coordinate_valid = output[..., 3] == 1.
+        output[..., :3][is_coordinate_valid] = (
+            (
+                (np.linalg.inv(_W_NEUS_T_W_BOP) @ np.hstack([
+                    output[..., :3][is_coordinate_valid],
+                    np.ones_like(
+                        output[..., :3][is_coordinate_valid][..., 0][..., None])
+                ]).T).T[..., :3] * one_uom_scene_to_m * 1000) -
+            self.objs[obj_idx].offset) / self.objs[obj_idx].scale
 
         if (M_crop is not None):
             # Apply affine transformation.

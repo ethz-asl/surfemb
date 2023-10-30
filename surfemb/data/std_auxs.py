@@ -47,8 +47,9 @@ class CoordinateLoader(BopInstanceAux):
             f'{dataset.coordinate_ext}')
         coord = np.load(fp)
         # Transform the coordinates from mm to the training scale.
-        coord = (coord - self._objs[inst['obj_idx']].offset
-                ) / self._objs[inst['obj_idx']].scale
+        offset = self._objs[inst['obj_idx']].offset.astype(coord.dtype)
+        scale = self._objs[inst['obj_idx']].scale.astype(coord.dtype)
+        coord = (coord - offset) / scale
         inst['offline_coord'] = coord.copy() if self.copy else coord
         return inst
 

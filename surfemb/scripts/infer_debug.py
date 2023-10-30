@@ -228,6 +228,7 @@ while True:
             obj_keys=keys_verts,
             obj_diameter=obj_.diameter,
             K=K_crop,
+            use_normals_criterion=args.use_normals_criterion,
             down_sample_scale=down_sample_scale,
             visualize=True,
             poses=poses[None],

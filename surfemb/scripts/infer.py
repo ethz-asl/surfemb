@@ -39,7 +39,7 @@ res_crop = args.res_crop
 device = torch.device(args.device)
 model_path = Path(args.model_path)
 assert model_path.is_file()
-model_name = model_path.name.split('.')[0]
+model_name = model_path.name.rsplit('.', maxsplit=1)[0]
 dataset = model_name.split('-')[0]
 renderer_type = args.renderer_type
 neus2_checkpoint_folders = args.neus2_checkpoint_folders

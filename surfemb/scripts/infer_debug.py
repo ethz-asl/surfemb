@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import torch.utils.data
 import numpy as np
+import re
 
 from .. import utils
 from ..data import obj
@@ -67,6 +68,15 @@ res_crop = 224
 
 objs, obj_ids = obj.load_objs(
     Path('data/bop') / args.surface_samples_dataset / cfg.model_folder)
+# If the model was only trained for one object, only evaluate on that.
+obj_id_in_name = re.findall(r"\d{6}", (model_path).parts[-1])
+if (len(obj_id_in_name) > 0):
+    assert (len(obj_id_in_name) == 1)
+    assert (len(model.cnn.decoders) == 1)
+    obj_id_in_name = int(obj_id_in_name[0])
+    objs = [objs[obj_ids.index(obj_id_in_name)]]
+    obj_ids = [obj_ids[obj_ids.index(obj_id_in_name)]]
+
 renderer = _INFER_RENDERERS[renderer_type](objs=objs,
                                            w=res_crop,
                                            **kwargs_renderer)

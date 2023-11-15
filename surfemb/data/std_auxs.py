@@ -179,7 +179,7 @@ class BackgroundForegroundGenerator(BopInstanceAux):
 
     def __call__(self, inst: dict, dataset: BopInstanceDataset) -> dict:
         if (self._passthrough):
-            return inst['rgb']
+            return inst
 
         if (self._random_bg_fg_creator is None):
             self._random_bg_fg_creator = RandomBackgroundForegroundCreator(

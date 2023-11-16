@@ -15,6 +15,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import re
 import torch
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -30,14 +31,26 @@ parser = argparse.ArgumentParser()
 parser.add_argument('model_path')
 parser.add_argument('--device', required=True)
 parser.add_argument('--debug', action='store_true')
+parser.add_argument('--res-crop', type=int, default=224)
 parser.add_argument('--renderer-type', type=str, required=True)
 parser.add_argument('--neus2-checkpoint-folders', nargs='+')
+parser.add_argument('--dataset',
+                    help="Dataset containing the images on which to evaluate.",
+                    required=True)
+parser.add_argument(
+    '--surface-samples-dataset',
+    help=("Dataset from which to extract the surface samples. This can be "
+          "useful when using the objects reconstructed by NeuS2 instead of the "
+          "CAD models."),
+    required=True)
 
 args = parser.parse_args()
-model_path = Path(args.model_path)
-name = model_path.name.split('.')[0]
-dataset = name.split('-')[0]
+res_crop = args.res_crop
 device = torch.device(args.device)
+model_path = Path(args.model_path)
+assert model_path.is_file()
+model_name = model_path.name.rsplit('.', maxsplit=1)[0]
+dataset = args.dataset
 renderer_type = args.renderer_type
 neus2_checkpoint_folders = args.neus2_checkpoint_folders
 
@@ -50,41 +63,55 @@ if (renderer_type == "neus2_online"):
     kwargs_renderer["checkpoint_folders"] = args.neus2_checkpoint_folders
 
 cfg = config[dataset]
-crop_res = 224
 root = Path('data/bop') / dataset
 test_folder = root / cfg.test_folder
 assert root.exists()
 
-poses = np.load(f'data/results/{name}-poses.npy')
-poses_timings = np.load(f'data/results/{name}-poses-timings.npy')
+poses = np.load(f'data/results/{model_name}-poses.npy')
+poses_timings = np.load(f'data/results/{model_name}-poses-timings.npy')
 poses_depth = poses.copy()
-poses_depth_fp = Path(f'data/results/{name}-depth-poses.npy')
-poses_depth_timings_fp = Path(f'data/results/{name}-depth-poses-timings.npy')
+poses_depth_fp = Path(f'data/results/{model_name}-depth-poses.npy')
+poses_depth_timings_fp = Path(
+    f'data/results/{model_name}-depth-poses-timings.npy')
 for fp in poses_depth_fp, poses_depth_timings_fp:
     assert not fp.exists()
 
-model = SurfaceEmbeddingModel.load_from_checkpoint(args.model_path).to(device)
+model = SurfaceEmbeddingModel.load_from_checkpoint(str(model_path)).to(device)
 model.eval()
 model.freeze()
 
-objs, obj_ids = load_objs(root / cfg.model_folder)
+objs, obj_ids = load_objs(
+    Path('data/bop') / args.surface_samples_dataset / cfg.model_folder)
+assert len(obj_ids) > 0
+# If the model was only trained for one object, only evaluate on that.
+obj_id_in_name = re.findall(r"\d{6}", (model_path).parts[-1])
+if (len(obj_id_in_name) > 0):
+    assert (len(obj_id_in_name) == 1)
+    assert (len(model.cnn.decoders) == 1)
+    obj_id_in_name = int(obj_id_in_name[0])
+    objs = [objs[obj_ids.index(obj_id_in_name)]]
+    obj_ids = [obj_ids[obj_ids.index(obj_id_in_name)]]
 dataset = DetectorCropDataset(
     dataset_root=root,
     obj_ids=obj_ids,
     cfg=cfg,
     detection_folder=Path(f'data/detection_results/{dataset}'),
-    auxs=model.get_infer_auxs(objs=objs, crop_res=crop_res))
+    auxs=model.get_infer_auxs(objs=objs,
+                              crop_res=res_crop,
+                              from_detections=True))
 assert poses.shape[1] == len(dataset)
 
 crop_renderer = _INFER_RENDERERS[renderer_type](objs=objs,
-                                                w=crop_res,
-                                                h=crop_res,
+                                                w=res_crop,
+                                                h=res_crop,
                                                 **kwargs_renderer)
 n_failed = 0
 all_depth_timings = [[], []]
 for j in range(2):
     depth_timings = all_depth_timings[j]
     for i, d in enumerate(tqdm(dataset)):
+        if (d is None):
+            continue
         pose = poses[j, i]  # (3, 4)
         R = pose[:3, :3]
         t = pose[:3, 3:]
@@ -112,10 +139,10 @@ for j in range(2):
             M = (K_crop @ np.linalg.inv(K))[:2]
             depth_sensor_mask_crop = cv2.warpAffine(
                 depth_sensor_mask,
-                M, (crop_res, crop_res),
+                M, (res_crop, res_crop),
                 flags=cv2.INTER_LINEAR) == 1.
             depth_sensor_crop = cv2.warpAffine(depth_sensor,
-                                               M, (crop_res, crop_res),
+                                               M, (res_crop, res_crop),
                                                flags=cv2.INTER_LINEAR)
             if (renderer_type == "moderngl"):
                 depth_render = crop_renderer.render(obj_idx,
@@ -141,9 +168,9 @@ for j in range(2):
             depth_diff = depth_sensor_crop[yy, xx] - depth_render[yy, xx]
             depth_adjustment = np.median(depth_diff)
 
-            yx_coords = np.meshgrid(np.arange(crop_res), np.arange(crop_res))
+            yx_coords = np.meshgrid(np.arange(res_crop), np.arange(res_crop))
             yx_coords = np.stack(yx_coords[::-1],
-                                 axis=-1)  # (crop_res, crop_res, 2yx)
+                                 axis=-1)  # (res_crop, res_crop, 2yx)
             yx_ray_2d = (yx_coords * query_img_norm[..., None]).sum(
                 axis=(0, 1))  # y, x
             ray_3d = np.linalg.inv(K_crop) @ (*yx_ray_2d[::-1], 1)

@@ -114,7 +114,7 @@ class NeuS2OnlineRenderer:
             # Consider a discontinuity of 0.02 in the NeuS scale when rendering
             # coordinates, to filter them.
             threshold_coordinates_filtering=0.02
-            if render_mode == "coordinate" else None)
+            if render_mode in ["coordinate", "depth"] else None)
 
         # Threshold alpha channel based on density.
         output[..., 3] = output[..., 3] > 0.8

@@ -101,6 +101,7 @@ class PoseEstimator:
                                                          w=res_crop,
                                                          h=res_crop,
                                                          **kwargs_renderer)
+        self._renderer_type = renderer_type
 
         # Set up infer-time augmentations.
         self._auxs = [
@@ -122,7 +123,7 @@ class PoseEstimator:
             torch.from_numpy(verts_norm).float().to(device), obj_idx=0)
         self._verts = torch.from_numpy(self._verts).float().to(device)
 
-    def estimate_pose(self, image, bbox):
+    def estimate_pose(self, image, bbox, depth_image=None, depth_scale=1.0):
         instance = dict(
             rgb=image.copy(),
             K=self._K,
@@ -160,7 +161,7 @@ class PoseEstimator:
 
         # Refinement.
         if (success):
-            R_est_r, t_est_r, score_r = refine_pose(
+            R_est, t_est, score_r = refine_pose(
                 R=R_est,
                 t=t_est,
                 query_img=query_img,
@@ -171,11 +172,58 @@ class PoseEstimator:
                 model=self.model,
                 keys_verts=self._obj_keys,
             )
-        else:
-            R_est_r, t_est_r = R_est, t_est
+
+        # Potentially apply depth-based refinement.
+        if (depth_image is not None):
+            depth_image = depth_image * depth_scale
+
+            depth_sensor_mask = (depth_image > 0).astype(np.float32)
+            M = (K_crop @ np.linalg.inv(self._K))[:2]
+            depth_sensor_mask_crop = cv2.warpAffine(
+                depth_sensor_mask,
+                M, (self._res_crop, self._res_crop),
+                flags=cv2.INTER_LINEAR) == 1.
+            depth_sensor_crop = cv2.warpAffine(depth_image,
+                                               M,
+                                               (self._res_crop, self._res_crop),
+                                               flags=cv2.INTER_LINEAR)
+            if (self._renderer_type == "moderngl"):
+                depth_render = self._renderer.render(0,
+                                                     K_crop,
+                                                     R_est,
+                                                     t_est,
+                                                     read_depth=True)
+            else:
+                depth_render = self._renderer.render_depth(
+                    0, K_crop, R_est, t_est)
+            render_mask = depth_render > 0
+
+            query_img_norm = torch.norm(query_img,
+                                        dim=-1) * torch.sigmoid(mask_lgts)
+            query_img_norm = query_img_norm.cpu().numpy(
+            ) * render_mask * depth_sensor_mask_crop
+            norm_sum = query_img_norm.sum()
+            if (norm_sum != 0):
+                query_img_norm /= norm_sum
+                norm_mask = query_img_norm > (query_img_norm.max() * 0.8)
+                yy, xx = np.argwhere(norm_mask).T  # 2 x (N,)
+                depth_diff = depth_sensor_crop[yy, xx] - depth_render[yy, xx]
+                depth_adjustment = np.median(depth_diff)
+
+                yx_coords = np.meshgrid(np.arange(self._res_crop),
+                                        np.arange(self._res_crop))
+                yx_coords = np.stack(
+                    yx_coords[::-1],
+                    axis=-1)  # (self._res_crop, self._res_crop, 2yx)
+                yx_ray_2d = (yx_coords * query_img_norm[..., None]).sum(
+                    axis=(0, 1))  # y, x
+                ray_3d = np.linalg.inv(K_crop) @ (*yx_ray_2d[::-1], 1)
+                ray_3d /= ray_3d[2]
+
+                t_est = t_est + ray_3d[:, None] * depth_adjustment
 
         # Show rendered pose.
-        render = self._renderer.render(0, K_crop, R_est_r, t_est_r)
+        render = self._renderer.render(0, K_crop, R_est, t_est)
         render_mask = render[..., 3] == 1.
         pose_img = img.copy()
         pose_img[render_mask] = pose_img[render_mask] * 0.5 + render[

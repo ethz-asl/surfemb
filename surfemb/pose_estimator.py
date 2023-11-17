@@ -75,8 +75,7 @@ class PoseEstimator:
 
         kwargs_renderer = {}
         if (renderer_type == "neus2_online"):
-            kwargs_renderer[
-                "checkpoint_folders"] = args.neus2_checkpoint_folders
+            kwargs_renderer["checkpoint_folders"] = neus2_checkpoint_folders
 
         # Load model.
         self.model = SurfaceEmbeddingModel.load_from_checkpoint(

@@ -69,11 +69,11 @@ res_crop = 224
 objs, obj_ids = obj.load_objs(
     Path('data/bop') / args.surface_samples_dataset / cfg.model_folder)
 # If the model was only trained for one object, only evaluate on that.
-obj_id_in_name = re.findall(r"0\d{5}", (model_path).parts[-1])
+obj_id_in_name = re.findall(r"0\d{5}[-_]", (model_path).parts[-1])
 if (len(obj_id_in_name) > 0):
     assert (len(obj_id_in_name) == 1)
     assert (len(model.cnn.decoders) == 1)
-    obj_id_in_name = int(obj_id_in_name[0])
+    obj_id_in_name = int(obj_id_in_name[0][:-1])
     objs = [objs[obj_ids.index(obj_id_in_name)]]
     obj_ids = [obj_ids[obj_ids.index(obj_id_in_name)]]
 

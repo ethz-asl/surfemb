@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import torch
 from typing import List, Optional
+import yaml
 
 from .data.obj import load_objs
 from .data.renderer import _INFER_RENDERERS
@@ -16,6 +17,29 @@ from .utils import load_surface_samples
 
 
 class PoseEstimator:
+
+    @classmethod
+    def from_flags(cls, flags_yaml_path):
+        # Read flags from file.
+        with open(flags_yaml_path, "r") as f:
+            flags = yaml.load(f, Loader=yaml.SafeLoader)
+
+        # Use the folder of the config file as the parent folder.
+        parent_folder = os.path.dirname(flags_yaml_path)
+
+        intrinsics_path = os.path.join(parent_folder,
+                                       flags.pop('intrinsics_path'))
+        flags["K"] = np.loadtxt(intrinsics_path)
+        for flag in [
+                "model_path", "object_model_folder",
+                "orig_frame_T_lock_center_path"
+        ]:
+            try:
+                flags[flag] = os.path.join(parent_folder, flags[flag])
+            except KeyError:
+                pass
+
+        return cls(**flags)
 
     def __init__(self,
                  model_path: str,

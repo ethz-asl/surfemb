@@ -1,6 +1,7 @@
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from pathlib import Path
 import torch
 from typing import List, Optional
@@ -23,6 +24,7 @@ class PoseEstimator:
                  use_normals_criterion: str,
                  renderer_type: str,
                  neus2_checkpoint_folders: Optional[List] = None,
+                 orig_frame_T_lock_center_path: Optional[str] = None,
                  device: str = "cuda:0",
                  res_crop: int = 224,
                  no_rotation_ensemble: bool = False):
@@ -51,6 +53,10 @@ class PoseEstimator:
                 required when `renderer_type` is `'neus2_online'`. NOTE: Each
                 folder is supposed to contain a "checkpoints/neus" subfolder
                 with the actual checkpoint.
+            orig_frame_T_lock_center_path (str): If not None, path to the
+                `orig_frame_T_lock_center.txt` defining the transformation
+                matrix from the lock-center coordinate frame to the world
+                coordinate frame of the object model, in meters.
             device (str): Device to use.
             res_crop (int): Resolution of the crop to use.
             no_rotation_ensemble (bool): If False, no rotation ensemble is used
@@ -94,6 +100,22 @@ class PoseEstimator:
         (self._surface_samples,
          self._surface_samples_normals) = load_surface_samples(
              "", self._obj_ids, root=Path(object_model_folder))
+        # - If available, load the file `orig_frame_T_lock_center.txt`.
+        if (orig_frame_T_lock_center_path is None):
+            self._W_NeuS_T_lock = None
+        else:
+            # - First, import the headless Open3D installation.
+            import sys
+            _parent_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            _headless_o3d_installation_dir = os.path.abspath(
+                os.path.join(_parent_dir, 'Open3D/headless_installation'))
+            sys.path.insert(1, _headless_o3d_installation_dir)
+            import open3d as o3d
+            self.__o3d = o3d
+
+            self._W_NeuS_T_lock = np.loadtxt(orig_frame_T_lock_center_path)
+            assert (self._W_NeuS_T_lock.shape == (4, 4))
 
         # Set up the renderer.
         self._renderer = _INFER_RENDERERS[renderer_type](objs=self._objs,
@@ -226,23 +248,74 @@ class PoseEstimator:
 
                 t_est = t_est + ray_3d[:, None] * depth_adjustment
 
-        # Render estimated pose.
-        render = self._renderer.render(0, K_crop, R_est, t_est)
-        render_mask = render[..., 3] == 1.
-        pose_img = img.copy()
-        pose_img[render_mask] = pose_img[render_mask] * 0.5 + render[
-            ..., :3][render_mask] * 0.25 + 0.25
-        if (visualize_estimated_pose):
-            # Optionally visualize estimated pose.
-            plt.imshow(pose_img)
-            plt.show()
-
-        # Output estimated pose and rendered image.
+        # Convert the estimated pose to meters.
         C_T_W_mm = np.eye(4)
         C_T_W_mm[:3, :3] = R_est
         C_T_W_mm[:3, 3] = t_est[..., 0]
 
         C_T_W_m = C_T_W_mm.copy()
         C_T_W_m[:3, 3] = C_T_W_m[:3, 3] / 1000.
+
+        # Render estimated pose.
+        render = self._renderer.render(0, K_crop, R_est, t_est)
+        render_mask = render[..., 3] == 1.
+        pose_img = img.copy()
+        pose_img[render_mask] = pose_img[render_mask] * 0.5 + render[
+            ..., :3][render_mask] * 0.25 + 0.25
+
+        # - If available, render and overlay the lock frame.
+        if (self._W_NeuS_T_lock is not None):
+            W_NeuS_t_lock = self._W_NeuS_T_lock[:3, 3]
+            W_NeuS_R_lock = self._W_NeuS_T_lock[:3, :3]
+            lock_coord_frame = (
+                self.__o3d.geometry.TriangleMesh.create_coordinate_frame(
+                    size=0.15, origin=W_NeuS_t_lock))
+            lock_coord_frame.rotate(W_NeuS_R_lock, center=W_NeuS_t_lock)
+            H, W = image.shape[:2]
+            H_crop, W_crop = img.shape[:2]
+            lock_visualizer = self.__o3d.visualization.Visualizer()
+            lock_visualizer.create_window(width=W, height=H)
+            lock_visualizer.clear_geometries()
+            lock_visualizer.add_geometry(lock_coord_frame)
+            lock_visualizer.update_renderer()
+            lock_visualizer.update_geometry(lock_coord_frame)
+
+            view_control = lock_visualizer.get_view_control()
+            camera_view_control = (
+                view_control.convert_to_pinhole_camera_parameters())
+            camera_view_control.intrinsic.height = H
+            camera_view_control.intrinsic.width = W
+
+            camera_view_control.intrinsic.intrinsic_matrix = self._K
+            camera_view_control.extrinsic = C_T_W_m
+            view_control.convert_from_pinhole_camera_parameters(
+                camera_view_control, allow_arbitrary=True)
+            lock_visualizer.poll_events()
+            estimated_lock_frame = np.asarray(
+                lock_visualizer.capture_screen_float_buffer())
+            # - Retrieve the actual crop used, which also corresponds to the
+            #   rendered pose image.
+            left, top, right, bottom = instance['AABB_crop']
+            # - Crop and resize the rendered lock image to the size of the
+            #   rendered pose image.
+            estimated_lock_frame = estimated_lock_frame[top:bottom + 1,
+                                                        left:right + 1]
+            estimated_lock_frame = cv2.resize(estimated_lock_frame,
+                                              (W_crop, H_crop),
+                                              interpolation=cv2.INTER_NEAREST)
+            orig_pose_img = pose_img.copy()
+            pose_img[estimated_lock_frame != [
+                1., 1., 1.
+            ]] = estimated_lock_frame[estimated_lock_frame != [1., 1., 1.]]
+
+        if (visualize_estimated_pose):
+            # Optionally visualize estimated pose.
+            plt.imshow(pose_img)
+            plt.show()
+
+        # If a lock coordinate frame is available, return the transform from
+        # this frame rather than the object world frame.
+        if (self._W_NeuS_T_lock is not None):
+            C_T_W_m = C_T_W_m @ self._W_NeuS_T_lock
 
         return C_T_W_m, pose_img

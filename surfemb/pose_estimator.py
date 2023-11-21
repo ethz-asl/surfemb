@@ -122,7 +122,12 @@ class PoseEstimator:
             torch.from_numpy(verts_norm).float().to(device), obj_idx=0)
         self._verts = torch.from_numpy(self._verts).float().to(device)
 
-    def estimate_pose(self, image, bbox, depth_image=None, depth_scale=1.0):
+    def estimate_pose(self,
+                      image,
+                      bbox,
+                      depth_image=None,
+                      depth_scale=1.0,
+                      visualize_estimated_pose=False):
         instance = dict(
             rgb=image.copy(),
             K=self._K,
@@ -221,12 +226,23 @@ class PoseEstimator:
 
                 t_est = t_est + ray_3d[:, None] * depth_adjustment
 
-        # Show rendered pose.
+        # Render estimated pose.
         render = self._renderer.render(0, K_crop, R_est, t_est)
         render_mask = render[..., 3] == 1.
         pose_img = img.copy()
         pose_img[render_mask] = pose_img[render_mask] * 0.5 + render[
             ..., :3][render_mask] * 0.25 + 0.25
+        if (visualize_estimated_pose):
+            # Optionally visualize estimated pose.
+            plt.imshow(pose_img)
+            plt.show()
 
-        plt.imshow(pose_img)
-        plt.show()
+        # Output estimated pose and rendered image.
+        C_T_W_mm = np.eye(4)
+        C_T_W_mm[:3, :3] = R_est
+        C_T_W_mm[:3, 3] = t_est[..., 0]
+
+        C_T_W_m = C_T_W_mm.copy()
+        C_T_W_m[:3, 3] = C_T_W_m[:3, 3] / 1000.
+
+        return C_T_W_m, pose_img

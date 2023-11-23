@@ -309,15 +309,15 @@ class PoseEstimator:
             tmp_file_path = os.path.abspath(
                 os.path.join(curr_file_path, "tmp_lock_frame.png"))
             return_code = os.system(
-                f"python {script_path} --W_NeuS_T_lock " +
-                ''.join([str(v) + ' '
-                         for v in self._W_NeuS_T_lock.reshape(-1)]) +
-                f"--H {H} --W {W}  --H_crop {H_crop} --W_crop {W_crop} "
+                f"python {script_path} --W_NeuS_T_lock " + ''.join([
+                    str(f'{v:.6f}') + ' '
+                    for v in self._W_NeuS_T_lock.reshape(-1)
+                ]) + f"--H {H} --W {W}  --H_crop {H_crop} --W_crop {W_crop} "
                 "--AABB_crop " +
                 ''.join(str(v) + ' ' for v in instance['AABB_crop']) + "--K " +
-                ''.join([str(v) + ' ' for v in self._K.reshape(-1)]) +
+                ''.join([str(f'{v:.6f}') + ' ' for v in self._K.reshape(-1)]) +
                 "--C_T_W_m " +
-                ''.join([str(v) + ' ' for v in C_T_W_m.reshape(-1)]) +
+                ''.join([str(f'{v:.6f}') + ' ' for v in C_T_W_m.reshape(-1)]) +
                 f"--output_file_path {tmp_file_path}")
             assert (return_code == 0
                    ), "Error in the subprocess to render the lock frame."

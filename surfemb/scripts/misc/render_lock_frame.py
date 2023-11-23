@@ -65,4 +65,4 @@ estimated_lock_frame = cv2.resize(estimated_lock_frame,
                                   (args.W_crop, args.H_crop),
                                   interpolation=cv2.INTER_NEAREST)
 # Save to file.
-cv2.imwrite(args.output_file_path, estimated_lock_frame[..., ::-1])
+cv2.imwrite(args.output_file_path, estimated_lock_frame)

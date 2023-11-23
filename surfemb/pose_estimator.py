@@ -1,5 +1,4 @@
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import os
 from pathlib import Path
@@ -333,8 +332,8 @@ class PoseEstimator:
 
         if (visualize_estimated_pose):
             # Optionally visualize estimated pose.
-            plt.imshow(pose_img)
-            plt.show()
+            cv2.imshow("Estimated pose", pose_img[..., ::-1])
+            cv2.waitKey(0)
 
         # If a lock coordinate frame is available, return the transform from
         # this frame rather than the object world frame.

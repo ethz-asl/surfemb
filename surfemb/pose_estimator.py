@@ -289,48 +289,39 @@ class PoseEstimator:
 
         # - If available, render and overlay the lock frame.
         if (self._W_NeuS_T_lock is not None):
-            W_NeuS_t_lock = self._W_NeuS_T_lock[:3, 3]
-            W_NeuS_R_lock = self._W_NeuS_T_lock[:3, :3]
-            lock_coord_frame = (
-                self.__o3d.geometry.TriangleMesh.create_coordinate_frame(
-                    size=0.15, origin=W_NeuS_t_lock))
-            lock_coord_frame.rotate(W_NeuS_R_lock, center=W_NeuS_t_lock)
             H, W = image.shape[:2]
             H_crop, W_crop = img.shape[:2]
-            lock_visualizer = self.__o3d.visualization.Visualizer()
-            lock_visualizer.create_window(width=W, height=H)
-            lock_visualizer.clear_geometries()
-            lock_visualizer.add_geometry(lock_coord_frame)
-            lock_visualizer.update_renderer()
-            lock_visualizer.update_geometry(lock_coord_frame)
-
-            view_control = lock_visualizer.get_view_control()
-            camera_view_control = (
-                view_control.convert_to_pinhole_camera_parameters())
-            camera_view_control.intrinsic.height = H
-            camera_view_control.intrinsic.width = W
-
-            camera_view_control.intrinsic.intrinsic_matrix = self._K
-            camera_view_control.extrinsic = C_T_W_m
-            view_control.convert_from_pinhole_camera_parameters(
-                camera_view_control, allow_arbitrary=True)
-            lock_visualizer.poll_events()
-            estimated_lock_frame = np.asarray(
-                lock_visualizer.capture_screen_float_buffer())
-            # - Retrieve the actual crop used, which also corresponds to the
-            #   rendered pose image.
-            left, top, right, bottom = instance['AABB_crop']
-            # - Crop and resize the rendered lock image to the size of the
-            #   rendered pose image.
-            estimated_lock_frame = estimated_lock_frame[top:bottom + 1,
-                                                        left:right + 1]
-            estimated_lock_frame = cv2.resize(estimated_lock_frame,
-                                              (W_crop, H_crop),
-                                              interpolation=cv2.INTER_NEAREST)
-            orig_pose_img = pose_img.copy()
-            pose_img[estimated_lock_frame != [
-                1., 1., 1.
-            ]] = estimated_lock_frame[estimated_lock_frame != [1., 1., 1.]]
+            # - Call the script to render the lock frame to a temporary file. It
+            #   is required to perform this in a separate thread, because the
+            #   Open3D renderer for the lock frame conflicts with the `moderngl`
+            #   object renderer.
+            curr_file_path = os.path.dirname(os.path.realpath(__file__))
+            script_path = os.path.abspath(
+                os.path.join(curr_file_path,
+                             'scripts/misc/render_lock_frame.py'))
+            tmp_file_path = os.path.abspath(
+                os.path.join(curr_file_path, "tmp_lock_frame.png"))
+            return_code = os.system(
+                f"python {script_path} --W_NeuS_T_lock " +
+                ''.join([str(v) + ' '
+                         for v in self._W_NeuS_T_lock.reshape(-1)]) +
+                f"--H {H} --W {W}  --H_crop {H_crop} --W_crop {W_crop} "
+                "--AABB_crop " +
+                ''.join(str(v) + ' ' for v in instance['AABB_crop']) + "--K " +
+                ''.join([str(v) + ' ' for v in self._K.reshape(-1)]) +
+                "--C_T_W_m " +
+                ''.join([str(v) + ' ' for v in C_T_W_m.reshape(-1)]) +
+                f"--output_file_path {tmp_file_path}")
+            assert (return_code == 0
+                   ), "Error in the subprocess to render the lock frame."
+            # - Read from file the temporary lock-frame image and overlay it to
+            #   the rendered pose image.
+            estimated_lock_frame = cv2.imread(tmp_file_path)
+            pose_img[
+                estimated_lock_frame != [1., 1., 1.]] = estimated_lock_frame[
+                    estimated_lock_frame != [1., 1., 1.]]
+            # - Delete the temporary lock-frame image.
+            os.remove(tmp_file_path)
 
         if (visualize_estimated_pose):
             # Optionally visualize estimated pose.

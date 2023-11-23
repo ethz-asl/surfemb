@@ -135,16 +135,6 @@ class PoseEstimator:
         if (orig_frame_T_lock_center_path is None):
             self._W_NeuS_T_lock = None
         else:
-            # - First, import the headless Open3D installation.
-            import sys
-            _parent_dir = os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            _headless_o3d_installation_dir = os.path.abspath(
-                os.path.join(_parent_dir, 'Open3D/headless_installation'))
-            sys.path.insert(1, _headless_o3d_installation_dir)
-            import open3d as o3d
-            self.__o3d = o3d
-
             self._W_NeuS_T_lock = np.loadtxt(orig_frame_T_lock_center_path)
             assert (self._W_NeuS_T_lock.shape == (4, 4))
 

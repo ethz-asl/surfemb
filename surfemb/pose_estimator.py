@@ -38,6 +38,14 @@ class PoseEstimator:
                 flags[flag] = os.path.join(parent_folder, flags[flag])
             except KeyError:
                 pass
+        if ("neus2_checkpoint_folders" in flags):
+            assert (isinstance(flags["neus2_checkpoint_folders"], list))
+            for checkpoint_folder_idx in range(
+                    len(flags["neus2_checkpoint_folders"])):
+                flags["neus2_checkpoint_folders"][
+                    checkpoint_folder_idx] = os.path.join(
+                        parent_folder, flags["neus2_checkpoint_folders"]
+                        [checkpoint_folder_idx])
 
         return cls(**flags)
 

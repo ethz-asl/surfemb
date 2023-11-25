@@ -93,13 +93,8 @@ class ObjCoordAux(BopInstanceAux):
                 M_crop,
                 inst['offline_coord'].shape[1::-1],
                 flags=cv2.INTER_NEAREST)
-            # - Normalize the coordinates.
-            is_coord_valid = np.any(inst['obj_coord'] != 0, axis=-1)
-            inst['obj_coord'][is_coord_valid] = inst['obj_coord'][
-                is_coord_valid] - self.objs[inst['obj_idx']].offset
-            inst['obj_coord'][is_coord_valid] = inst['obj_coord'][
-                is_coord_valid] / self.objs[inst['obj_idx']].scale
             # - Add 'alpha' channel.
+            is_coord_valid = np.any(inst['obj_coord'] != 0, axis=-1)
             inst['obj_coord'] = np.concatenate(
                 [inst['obj_coord'], is_coord_valid[..., None]], axis=-1)
 

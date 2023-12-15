@@ -33,6 +33,8 @@ class PoseEstimator:
                 "model_path", "object_model_folder",
                 "orig_frame_T_lock_center_path"
         ]:
+            if (flags[flag] is None):
+                continue
             try:
                 flags[flag] = os.path.join(parent_folder, flags[flag])
             except KeyError:

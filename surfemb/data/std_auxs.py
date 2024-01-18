@@ -9,6 +9,7 @@ from .bg_fg_auxs import RandomBackgroundForegroundCreator
 from .instance import BopInstanceDataset, BopInstanceAux
 from .renderer import _RENDERERS
 from .tfms import normalize
+from .WBAugmenter.WBEmulator import WBEmulator
 
 
 class RgbLoader(BopInstanceAux):
@@ -204,6 +205,18 @@ class BackgroundForegroundGenerator(BopInstanceAux):
 
         inst['rgb'] = (rgba.cpu().numpy() * 255.).astype(np.uint8)
 
+        return inst
+
+
+class WhiteBalanceAux(BopInstanceAux):
+
+    def __init__(self):
+        # Instantiate white-background augmentatation emulator from
+        # https://github.com/mahmoudnafifi/WB_color_augmenter.
+        self._wb_emulator = WBEmulator()
+
+    def __call__(self, inst: dict, _) -> dict:
+        inst['rgb'] = self._wb_emulator.single_image_processing(inst['rgb'])
         return inst
 
 

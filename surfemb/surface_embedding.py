@@ -94,6 +94,7 @@ class SurfaceEmbeddingModel(pl.LightningModule):
                 passthrough=not generate_bg_fg,
                 probability_foreground_objects=probability_foreground_objects,
                 mask_type='mask_visib'),
+            data.std_auxs.WhiteBalanceAux(),
             random_crop_aux.definition_aux,
             # Some image augmentations probably make most sense in the original
             # image, before rotation / rescaling by cropping. 'definition_aux'

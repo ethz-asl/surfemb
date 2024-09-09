@@ -33,10 +33,11 @@ class PoseEstimator:
                 "model_path", "object_model_folder",
                 "orig_frame_T_lock_center_path"
         ]:
-            if (flags[flag] is None):
-                continue
             try:
-                flags[flag] = os.path.join(parent_folder, flags[flag])
+                if (flags[flag] is None):
+                    continue
+                else:
+                    flags[flag] = os.path.join(parent_folder, flags[flag])
             except KeyError:
                 pass
         if ("neus2_checkpoint_folders" in flags):
